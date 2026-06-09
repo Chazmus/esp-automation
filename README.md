@@ -28,9 +28,9 @@ This design allows you to maintain multiple different devices (such as a Tempera
 │       └── main.py             # Target script (reads from ADC pins)
 │
 └── scripts/                    # Workflow automation utilities
-    ├── deploy.sh               # Selective deployer (takes device target argument)
-    ├── repl.sh                 # Monitors board output & opens interactive REPL
-    └── status.sh               # Queries board metadata and active files
+    ├── deploy.py               # Selective deployer (takes device target argument)
+    ├── repl.py                 # Monitors board output & opens interactive REPL
+    └── status.py               # Queries board metadata and active files
 ```
 
 ---
@@ -69,10 +69,10 @@ To flash a specific device, pass the device directory name as an argument. The d
 
 ```bash
 # Deploy the Temperature & Humidity node
-./scripts/deploy.sh temp_humidity
+python3 scripts/deploy.py temp_humidity
 
 # Deploy the Soil Moisture monitor
-./scripts/deploy.sh soil_moisture
+python3 scripts/deploy.py soil_moisture
 ```
 
 *If you do not provide an argument, the deployer will print a list of all available device folders in your project.*
@@ -80,14 +80,14 @@ To flash a specific device, pass the device directory name as an argument. The d
 ### 💻 Connect to interactive Python REPL
 Launches you directly into the interactive MicroPython command line (REPL) running on the chip without soft-resetting:
 ```bash
-./scripts/repl.sh
+python3 scripts/repl.py
 ```
 *(Remember: Press `Ctrl + ]` to exit the REPL).*
 
 ### 🔍 Check Board Status
 Queries the connected microcontroller's system information and lists all active files on its internal filesystem:
 ```bash
-./scripts/status.sh
+python3 scripts/status.py
 ```
 
 ---
