@@ -32,5 +32,5 @@ else
     MPREMOTE="mpremote"
 fi
 
-# 4. Connect to REPL
-$RUN_PREFIX $MPREMOTE connect "$PORT" repl
+# 4. Connect to REPL (using resume to avoid soft-reset on connect)
+$RUN_PREFIX $MPREMOTE connect "$PORT" resume repl
