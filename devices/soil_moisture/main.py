@@ -10,6 +10,10 @@ print("========================================\n")
 print("Starting main loop in 2 seconds... Press Ctrl+C to cancel.")
 time.sleep(2)
 
+# --- WiFi Connection ---
+import wifi
+wifi.connect()
+
 # --- ADC (Analog-to-Digital Converter) Configuration ---
 # Physical Wiring:
 #   ESP32-C3 3.3V  -->  Soil Moisture Sensor VCC

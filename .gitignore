@@ -18,13 +18,15 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
 var/
 wheels/
 share/python-wheels/
+
+# Ignore local secrets
+lib/secrets.py
 *.egg-info/
 .installed.cfg
 *.egg

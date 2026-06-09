@@ -12,6 +12,10 @@ print("========================================\n")
 print("Starting main loop in 2 seconds... Press Ctrl+C to cancel.")
 time.sleep(2)
 
+# --- WiFi Connection ---
+import wifi
+wifi.connect()
+
 # --- LED Configuration ---
 LED_PIN_NUMBER = 8  
 USE_NEOPIXEL = False  # Set to True if your board has an RGB WS2812 onboard LED
