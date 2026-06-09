@@ -94,21 +94,36 @@ python3 scripts/status.py
 
 ## 3. Understanding the Shared Code Pattern
 
-*   **`lib/`**: Contains core modules that can be imported by *any* device. When you run `./scripts/deploy.sh <device>`, everything in `lib/` is placed inside the ESP32's `/lib/` folder. MicroPython's import subsystem automatically searches `/lib/` by default.
+*   **`lib/`**: Contains core modules that can be imported by *any* device. When you run `python3 scripts/deploy.py <device>`, everything in `lib/` is placed inside the ESP32's `/lib/` folder. MicroPython's import subsystem automatically searches `/lib/` by default.
     *   *Example:* Inside `devices/temp_humidity/main.py`, you can run `import ahtx0` directly even though the library is kept in the shared folder!
 *   **`devices/`**: Contains completely separate device configurations. They have their own `boot.py` and `main.py` files. They run as fully independent programs once deployed.
 
 ---
 
-## 4. IDE / Neovim / LazyVim LSP Integration
+## 4. Host Setup & IDE LSP Integration
 
-To prevent LSPs (like Pyright/Basedpyright) from showing red warnings when your device-specific `main.py` imports code from the shared `lib/` directory, **`pyrightconfig.json`** is pre-configured with `"extraPaths": ["lib"]`.
+### 🐍 Python Environment Setup
+To set up your python environment on the host and install all required tools (`esptool`, `mpremote`, and MicroPython autocompletion stubs):
 
-### Activating the Virtual Environment on Host
-To enable autocompletion on your host shell or editor:
 ```bash
-source .venv/bin/activate
-```
-*(Run `deactivate` to exit).*
+# Create the virtual environment
+python3 -m venv .venv
 
-When you open LazyVim inside this project, the LSP will seamlessly resolve your MicroPython stubs, resolve shared library imports, and offer full autocompletion, type hinting, and zero warnings across all folders!
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Install required dependencies
+pip install -r requirements.txt
+```
+*(Run `deactivate` to exit the environment).*
+
+Once installed, your editor's LSP (like Pyright/Basedpyright in LazyVim) will read the configured `pyrightconfig.json` to resolve the shared `lib/` folder and offer full autocompletion, type hinting, and zero warnings across all folders!
+
+### 🔌 Running Without Sudo (Serial Port Permissions)
+If you encounter permission issues when interacting with the serial port, add your user to the appropriate group (usually `uucp` on Arch or `dialout` on Debian/Ubuntu):
+
+```bash
+# Add user to uucp group (or dialout)
+sudo usermod -aG uucp $USER
+```
+*Note: You will need to log out and log back in (or run `newgrp uucp`) for the group changes to take effect.*
