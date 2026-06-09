@@ -6,13 +6,16 @@ print("\n========================================")
 print("Hello, ESP32-C3 World from MicroPython!")
 print("========================================\n")
 
+# --- Deployment Safeguard ---
+# A brief delay at startup gives host tools (like mpremote or Thonny) 
+# a clean window to interrupt execution and connect to the REPL.
+print("Starting main loop in 2 seconds... Press Ctrl+C to cancel.")
+time.sleep(2)
+
 # Configuration: Adjust the pin numbers based on your specific board.
-# Most ESP32-C3 Super Mini / DevKits use GPIO 8 for the onboard LED.
-# ESP32-C3 DevKitM-1 often uses GPIO 2 or 8.
 LED_PIN_NUMBER = 8  
 
 # Detect if we should use NeoPixel or a standard simple LED.
-# Many modern ESP32-C3 DevKits have an addressable NeoPixel (WS2812) RGB LED.
 USE_NEOPIXEL = False  # Set to True if your board has an RGB WS2812 onboard LED
 
 # Initialize variables to None to satisfy static analysis (LSPs like Pyright)
@@ -30,24 +33,28 @@ else:
     print(f"Configured standard digital LED on GPIO {LED_PIN_NUMBER}")
 
 counter = 0
+print("Running main loop. Press Ctrl+C to stop.")
 
-while True:
-    counter += 1
-    print(f"[{counter}] Heartbeat: ESP32-C3 is alive and running Python!")
-    
-    if USE_NEOPIXEL and np is not None:
-        # Blink NeoPixel with different colors: Green, Blue, Red
-        colors = [(0, 64, 0), (0, 0, 64), (64, 0, 0)]
-        color = colors[counter % len(colors)]
-        np[0] = color
-        np.write()
-        time.sleep(0.5)
-        np[0] = (0, 0, 0) # Turn off
-        np.write()
-        time.sleep(0.5)
-    elif led is not None:
-        # Blink standard digital LED
-        led.value(1) # Turn on (Note: Some boards are active-low, meaning 0 is on)
-        time.sleep(0.5)
-        led.value(0) # Turn off
-        time.sleep(0.5)
+try:
+    while True:
+        counter += 1
+        print(f"[{counter}] Heartbeat: ESP32-C3 is alive and running Python!")
+        
+        if USE_NEOPIXEL and np is not None:
+            # Blink NeoPixel with different colors: Green, Blue, Red
+            colors = [(0, 64, 0), (0, 0, 64), (64, 0, 0)]
+            color = colors[counter % len(colors)]
+            np[0] = color
+            np.write()
+            time.sleep(0.5)
+            np[0] = (0, 0, 0) # Turn off
+            np.write()
+            time.sleep(0.5)
+        elif led is not None:
+            # Blink standard digital LED
+            led.value(1) # Turn on
+            time.sleep(0.5)
+            led.value(0) # Turn off
+            time.sleep(0.5)
+except KeyboardInterrupt:
+    print("\n[Stop] Main loop interrupted by user. Returning to REPL.")
