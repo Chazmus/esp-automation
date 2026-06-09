@@ -41,6 +41,6 @@ fi
 echo -e "\n--- 1. Querying Chip Information ---"
 $RUN_PREFIX $ESPTOOL --port "$PORT" chip-id
 
-# 5. List files on the board
+# 5. List files on the board (using resume to avoid soft-resetting the running program)
 echo -e "\n--- 2. Listing Files on Board ---"
-$RUN_PREFIX $MPREMOTE connect "$PORT" ls
+$RUN_PREFIX $MPREMOTE connect "$PORT" resume ls

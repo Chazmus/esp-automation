@@ -1,115 +1,114 @@
-# ESP32-C3 MicroPython Development Guide
+# ESP32-C3 MicroPython Fleet Development Guide
 
-Welcome to your ESP32-C3 MicroPython development workspace! This project is organized with a clean directory structure to separate your application code, firmware, and utility scripts.
+Welcome to your modular, multi-board MicroPython workspace! This project is organized using a **Shared Core + Selective Deployment (Strategy 1)** architecture. 
+
+This design allows you to maintain multiple different devices (such as a Temperature/Humidity sensor and a Soil Moisture monitor) in the same codebase while sharing common helper modules, libraries, and utilities.
 
 ---
 
 ## 📂 Project Structure
 
 ```text
-├── firmware/              # MicroPython firmware binaries (.bin)
-├── pyrightconfig.json     # Configuration for Pyright LSP
-├── README.md              # This guide
-├── scripts/               # Host system helper scripts for flashing/monitoring
-│   ├── deploy.sh          # Syncs src/ files to board and soft-resets
-│   ├── repl.sh            # Starts an interactive REPL
-│   └── status.sh          # Checks port, chip, and lists uploaded files
-└── src/                   # Python application files running on the ESP32
-    ├── boot.py            # Executed first on boot
-    └── main.py            # Executed second (main loop / program code)
+├── .venv/                      # Host Python virtual environment (type stubs)
+├── firmware/                   # MicroPython firmware binaries (.bin)
+├── pyrightconfig.json          # Configuration for Neovim / Pyright LSP
+├── README.md                   # This guide
+│
+├── lib/                        # SHARED core libraries (deployed to ALL boards)
+│   └── ahtx0.py                # Reusable AHT20 sensor driver
+│
+├── devices/                    # INDIVIDUAL DEVICE NODE SCHEMAS
+│   │
+│   ├── temp_humidity/          # Device #1: Air Temperature & Humidity
+│   │   ├── boot.py             # Startup configuration for Device 1
+│   │   └── main.py             # Target script (imports ahtx0 and reads over I2C)
+│   │
+│   └── soil_moisture/          # Device #2: Analog Soil Moisture Monitor
+│       ├── boot.py             # Startup configuration for Device 2
+│       └── main.py             # Target script (reads from ADC pins)
+│
+└── scripts/                    # Workflow automation utilities
+    ├── deploy.sh               # Selective deployer (takes device target argument)
+    ├── repl.sh                 # Monitors board output & opens interactive REPL
+    └── status.sh               # Queries board metadata and active files
 ```
 
 ---
 
-## 1. Board Discovery & Port Access
+## 1. Physical Device Wiring Diagrams
 
-On Linux, your ESP32-C3 board with native USB-Serial/JTAG support is detected as:
-*   **Device name:** `Espressif USB JTAG/serial debug unit`
-*   **Port path:** `/dev/ttyACM0` (or similar)
+### Device 1: Temperature & Humidity Sensor (AHT20)
+Uses **I2C communication** on default pins:
 
-### Fixing USB Permissions (Crucial Step)
-By default, standard users on Linux do not have read/write access to serial ports. To fix this permanently:
-
-1. Add your user to the `dialout` group:
-   ```bash
-   sudo usermod -aG dialout $USER
-   ```
-2. **Log out of your Linux session and log back in** (or restart your machine) for the changes to take effect.
-
-> **Note:** For the current session, or if you encounter permission errors, your helper scripts will automatically run with `sudo` where necessary, so you can start developing right away!
+| AHT20 Sensor Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
+| :--- | :--- | :--- | :--- |
+| **VIN / VCC** | Red | **3.3V** | Power supply (do not use 5V) |
+| **GND** | Black | **GND** | Ground |
+| **SDA** (Serial Data) | Yellow | **GPIO 5** | I2C Serial Data line |
+| **SCL** (Serial Clock)| White | **GPIO 6** | I2C Serial Clock line |
 
 ---
 
-## 2. Flashing MicroPython
+### Device 2: Soil Moisture Monitor (Analog ADC)
+Uses **Analog input (ADC)** to read soil resistance:
 
-The latest stable MicroPython firmware (`v1.28.0`) is stored in:
-`firmware/ESP32_GENERIC_C3-20260406-v1.28.0.bin`
+| Soil Moisture Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
+| :--- | :--- | :--- | :--- |
+| **VCC** | Red | **3.3V** | Power supply |
+| **GND** | Black | **GND** | Ground |
+| **AO** (Analog Out) | Blue | **GPIO 0** | Analog input (ADC1_CH0) |
 
-If you ever need to re-flash or flash another board, run these commands:
+---
 
-### Step A: Erase the Existing Flash
+## 2. Workspace Helper Scripts
+
+Host commands are located inside the `scripts/` directory. They are designed to auto-detect which USB port your ESP32-C3 is plugged into and automatically manage serial permissions.
+
+### 📤 Deploy / Flash Selective Devices
+To flash a specific device, pass the device directory name as an argument. The deployer will automatically copy all files inside `lib/` to `/lib/` on the board, upload the device's specific files to `/`, and soft-reset the processor:
+
 ```bash
-esptool --chip esp32c3 --port /dev/ttyACM0 erase-flash
+# Deploy the Temperature & Humidity node
+./scripts/deploy.sh temp_humidity
+
+# Deploy the Soil Moisture monitor
+./scripts/deploy.sh soil_moisture
 ```
 
-### Step B: Write the MicroPython Firmware
+*If you do not provide an argument, the deployer will print a list of all available device folders in your project.*
+
+### 💻 Connect to interactive Python REPL
+Launches you directly into the interactive MicroPython command line (REPL) running on the chip without soft-resetting:
 ```bash
-esptool --chip esp32c3 --port /dev/ttyACM0 --baud 460800 write-flash -z 0x0 firmware/ESP32_GENERIC_C3-20260406-v1.28.0.bin
+./scripts/repl.sh
 ```
-
----
-
-## 3. Workspace Helper Scripts
-
-We have provided three automated, auto-port-detecting utility scripts inside the `scripts/` folder to make your host workflow seamless:
+*(Remember: Press `Ctrl + ]` to exit the REPL).*
 
 ### 🔍 Check Board Status
-Automatically detects which USB port your ESP32-C3 is plugged into, queries its chip architecture/details, and lists all files currently uploaded to its flash:
+Queries the connected microcontroller's system information and lists all active files on its internal filesystem:
 ```bash
 ./scripts/status.sh
 ```
 
-### 📤 Deploy / Flash Files
-Auto-detects the active port, uploads both `src/boot.py` and `src/main.py` onto the ESP32-C3, and triggers a soft reset to immediately run your new code:
-```bash
-./scripts/deploy.sh
-```
+---
 
-### 💻 Connect to interactive Python REPL
-Auto-detects the port and launches you directly into the interactive MicroPython command line (REPL) running on the chip:
-```bash
-./scripts/repl.sh
-```
-*(Remember: Press `Ctrl + ]` to exit the REPL and return to your terminal).*
+## 3. Understanding the Shared Code Pattern
+
+*   **`lib/`**: Contains core modules that can be imported by *any* device. When you run `./scripts/deploy.sh <device>`, everything in `lib/` is placed inside the ESP32's `/lib/` folder. MicroPython's import subsystem automatically searches `/lib/` by default.
+    *   *Example:* Inside `devices/temp_humidity/main.py`, you can run `import ahtx0` directly even though the library is kept in the shared folder!
+*   **`devices/`**: Contains completely separate device configurations. They have their own `boot.py` and `main.py` files. They run as fully independent programs once deployed.
 
 ---
 
-## 4. Understanding the Python Application (`src/`)
+## 4. IDE / Neovim / LazyVim LSP Integration
 
-*   **`src/boot.py`**: This script runs once when the board powers up or resets. It is typically used for low-level configuration, disabling system logs, or setting up a Wi-Fi connection.
-*   **`src/main.py`**: This script runs automatically immediately after `boot.py` finishes. It contains your main application loop.
+To prevent LSPs (like Pyright/Basedpyright) from showing red warnings when your device-specific `main.py` imports code from the shared `lib/` directory, **`pyrightconfig.json`** is pre-configured with `"extraPaths": ["lib"]`.
 
-### Configuring your LED inside `src/main.py`
-Many ESP32-C3 dev boards have different onboard LEDs. Inside `src/main.py`, you can configure the behavior to suit your board:
-*   **Standard Single Color LED:** (e.g., ESP32-C3 Super Mini). Keep `USE_NEOPIXEL = False` and set `LED_PIN_NUMBER = 8`.
-*   **Addressable WS2812/NeoPixel RGB LED:** (e.g., Espressif DevKitC/DevKitM). Set `USE_NEOPIXEL = True` and set `LED_PIN_NUMBER` to the appropriate GPIO (usually `8` or `2`).
-
----
-
-## 5. IDE / Neovim / LazyVim LSP Setup
-
-To prevent LSPs (like Pyright/Basedpyright) from complaining about missing imports (like `machine` or `neopixel`), a Python virtual environment has been set up with the **`micropython-esp32-stubs`** package.
-
-Additionally, a **`pyrightconfig.json`** file is configured in the project root to:
-1. Target the local virtual environment (`.venv`).
-2. Point Pyright to analyze only the `src/` directory.
-3. Suppress missing source file warnings (`reportMissingModuleSource: "none"`).
-
-### Activating the Virtual Environment
-To work inside this environment on your terminal:
+### Activating the Virtual Environment on Host
+To enable autocompletion on your host shell or editor:
 ```bash
 source .venv/bin/activate
 ```
 *(Run `deactivate` to exit).*
 
-When you open Neovim/LazyVim from this folder, your LSP will automatically detect the virtual environment, resolve the MicroPython stubs, and provide full autocompletion, type hinting, and error-free imports!
+When you open LazyVim inside this project, the LSP will seamlessly resolve your MicroPython stubs, resolve shared library imports, and offer full autocompletion, type hinting, and zero warnings across all folders!
