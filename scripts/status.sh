@@ -41,6 +41,9 @@ fi
 echo -e "\n--- 1. Querying Chip Information ---"
 $RUN_PREFIX $ESPTOOL --port "$PORT" chip-id
 
-# 5. List files on the board (using resume to avoid soft-resetting the running program)
+# Give the USB-CDC port a moment to re-enumerate on the host after the hardware reset
+sleep 1
+
+# 5. List files on the board
 echo -e "\n--- 2. Listing Files on Board ---"
-$RUN_PREFIX $MPREMOTE connect "$PORT" resume ls
+$RUN_PREFIX $MPREMOTE connect "$PORT" ls
