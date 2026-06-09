@@ -16,21 +16,6 @@ time.sleep(2)
 import wifi
 wifi.connect()
 
-# --- LED Configuration ---
-LED_PIN_NUMBER = 8  
-USE_NEOPIXEL = False  # Set to True if your board has an RGB WS2812 onboard LED
-
-np = None
-led = None
-
-if USE_NEOPIXEL:
-    import neopixel
-    np = neopixel.NeoPixel(machine.Pin(LED_PIN_NUMBER, machine.Pin.OUT), 1)
-    print(f"Configured NeoPixel RGB LED on GPIO {LED_PIN_NUMBER}")
-else:
-    led = machine.Pin(LED_PIN_NUMBER, machine.Pin.OUT)
-    print(f"Configured standard digital LED on GPIO {LED_PIN_NUMBER}")
-
 # --- I2C & AHT20 Sensor Configuration ---
 # Physical Wiring:
 #   ESP32-C3 3.3V  -->  AHT20 VIN / VCC
@@ -56,37 +41,44 @@ try:
 except Exception as e:
     print(f"⚠️  Could not initialize I2C or Sensor: {e}")
 
-counter = 0
+last_post_time = 0
 print("\nRunning main loop. Press Ctrl+C to stop.\n")
 
 try:
     while True:
-        counter += 1
-        print(f"[{counter}] Heartbeat: ESP32-C3 is alive!")
-        
         # 1. Read from AHT20 Sensor (if available)
         if sensor is not None:
             try:
                 temp = sensor.temperature
                 humidity = sensor.relative_humidity
-                print(f"     🌡️  Temperature: {temp:.2f} °C | 💧 Humidity: {humidity:.2f} %")
+                print(f"🌡️  Temperature: {temp:.2f} °C | 💧 Humidity: {humidity:.2f} %")
+                
+                # Post to Home Assistant at intervals (every 60 seconds)
+                if time.time() - last_post_time >= 60:
+                    import secrets
+                    import homeassistant
+                    
+                    # Post Temperature
+                    homeassistant.post_state(
+                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_temp",
+                        state_value=f"{temp:.2f}",
+                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Temperature",
+                        unit_of_measurement="°C",
+                        device_class="temperature"
+                    )
+                    # Post Humidity
+                    homeassistant.post_state(
+                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_humidity",
+                        state_value=f"{humidity:.2f}",
+                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Humidity",
+                        unit_of_measurement="%",
+                        device_class="humidity"
+                    )
+                    last_post_time = time.time()
             except Exception as e:
-                print(f"     ⚠️  Error reading from AHT20: {e}")
+                print(f"     ⚠️  Error reading AHT20 or posting to HA: {e}")
         
-        # 2. Blink the LED
-        if USE_NEOPIXEL and np is not None:
-            colors = [(0, 64, 0), (0, 0, 64), (64, 0, 0)]
-            color = colors[counter % len(colors)]
-            np[0] = color
-            np.write()
-            time.sleep(0.5)
-            np[0] = (0, 0, 0)
-            np.write()
-            time.sleep(0.5)
-        elif led is not None:
-            led.value(1)
-            time.sleep(0.5)
-            led.value(0)
-            time.sleep(0.5)
+        # Sleep for 5 seconds between readings to reduce CPU usage and sensor wear
+        time.sleep(5.0)
 except KeyboardInterrupt:
     print("\n[Stop] Main loop interrupted by user. Returning to REPL.")
