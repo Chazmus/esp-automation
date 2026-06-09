@@ -52,12 +52,20 @@ if [ ! -w "$PORT" ]; then
     RUN_PREFIX="sudo env PATH=$PATH"
 fi
 
-# 4. Choose correct mpremote executable
+# 4. Choose correct mpremote/esptool executables
 if [ -f ".venv/bin/mpremote" ]; then
     MPREMOTE=".venv/bin/mpremote"
+    ESPTOOL=".venv/bin/esptool"
 else
     MPREMOTE="mpremote"
+    ESPTOOL="esptool"
 fi
+
+# Hard-reset the board to break any frozen print loops (common with native USB CDC on ESP32-C3)
+echo "🔄 Resetting the board to prepare for deployment..."
+$RUN_PREFIX $ESPTOOL --port "$PORT" chip-id >/dev/null 2>&1 || true
+sleep 1
+
 
 # 5. Create /lib directory on the microcontroller if it doesn't exist
 echo "📁 Preparing /lib directory on microcontroller..."
