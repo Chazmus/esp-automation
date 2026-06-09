@@ -193,3 +193,28 @@ homeassistant.post_state(
     device_class="temperature"
 )
 ```
+
+---
+
+## 7. Deep Sleep & Battery Optimization
+
+Both device nodes are optimized for long-term battery operation using an 18650 cell.
+
+### 💤 Deep Sleep Behavior
+* The nodes boot, read sensor data, connect to WiFi, post to Home Assistant, and then enter deep sleep for **15 minutes** (900 seconds).
+* To prevent battery waste, the **5-second deployment safeguard delay** is only active on a cold boot or manual hardware reset (`machine.reset_cause() != machine.DEEPSLEEP_RESET`). Wakes from deep sleep start measurements instantly.
+
+### 🔌 Battery-Saving GPIO Power-Gating (Soil Moisture)
+Soil moisture sensors draw continuous current (~5mA) if wired directly to the 3.3V power rail. To prevent this, you can control the sensor's power via a GPIO pin:
+1. Connect the sensor's **VCC** pin to **GPIO 1** instead of the 3.3V rail.
+2. In [devices/soil_moisture/main.py](file:///home/cbailey/workspace/esp-automation/devices/soil_moisture/main.py), configure `POWER_PIN_NUMBER = 1`.
+3. The board will automatically supply power to the sensor, wait for it to stabilize, take readings, and then float the pin during deep sleep, reducing sleep current to just a few microamps!
+
+### 📡 Debugging a Sleeping Node
+When a board is in deep sleep, it cannot accept programming/debugging commands. To flash new code or connect to the REPL:
+1. Press the physical **EN / RST** button on the ESP32-C3 board to reset it.
+2. Run your deployment command or open the REPL during the **5-second safeguard delay** before the board goes to sleep:
+   ```bash
+   python3 scripts/deploy.py temp_humidity
+   ```
+
