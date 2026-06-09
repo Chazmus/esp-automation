@@ -15,7 +15,10 @@ This design allows you to maintain multiple different devices (such as a Tempera
 ├── README.md                   # This guide
 │
 ├── lib/                        # SHARED core libraries (deployed to ALL boards)
-│   └── ahtx0.py                # Reusable AHT20 sensor driver
+│   ├── ahtx0.py                # Reusable AHT20 sensor driver
+│   ├── homeassistant.py        # Client library to post data to Home Assistant REST API
+│   ├── secrets.py.example      # Template for WiFi credentials (copy to secrets.py)
+│   └── wifi.py                 # Shared connection utility (modem stability optimized)
 │
 ├── devices/                    # INDIVIDUAL DEVICE NODE SCHEMAS
 │   │
@@ -127,3 +130,66 @@ If you encounter permission issues when interacting with the serial port, add yo
 sudo usermod -aG uucp $USER
 ```
 *Note: You will need to log out and log back in (or run `newgrp uucp`) for the group changes to take effect.*
+
+---
+
+## 5. WiFi Configuration
+
+Both the Temperature/Humidity and Soil Moisture devices are pre-configured to connect to WiFi on boot using a shared network module.
+
+### 🔑 Credentials Setup
+1. Copy the template secrets file:
+   ```bash
+   cp lib/secrets.py.example lib/secrets.py
+   ```
+2. Open the newly created [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) and fill in your WiFi details:
+   ```python
+   WIFI_SSID = "your-wifi-name"
+   WIFI_PASSWORD = "your-wifi-password"
+   ```
+   *Note: [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) is ignored by Git to keep your network credentials secure.*
+
+### 🛠️ Connection Stability Tuning
+Under the hood, [lib/wifi.py](file:///home/cbailey/workspace/esp-automation/lib/wifi.py) is pre-configured with the following hardware adjustments for the ESP32-C3:
+* **Modem Power Management (`pm=PM_NONE`)**: Disabled to prevent packet dropouts during the router's WPA2/WPA3 4-way handshake.
+* **Reduced Transmit Power (`txpower=5`)**: Lowered to prevent current draw spikes from causing voltage brownouts and RF transceiver instability.
+* **Country Code (`network.country('GB')`)**: Configured for local regulatory compliance and clean channel scanning.
+
+### 📝 Usage in Code
+To connect any new device node, simply import the helper at the top of your `main.py`:
+```python
+import wifi
+
+# Connect on boot
+wifi.connect()
+```
+
+---
+
+## 6. Home Assistant Integration
+
+This project includes a shared client module **`lib/homeassistant.py`** to post data directly to Home Assistant's REST API.
+
+### 🔑 Setup
+1. Generate a **Long-Lived Access Token** in your Home Assistant profile settings.
+2. In [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py), configure `HA_URL` (use your Home Assistant server's local IP address instead of `.local`) and `HA_TOKEN`:
+   ```python
+   HA_URL = "http://192.168.86.X:8123"
+   HA_TOKEN = "your-long-lived-access-token"
+   ```
+
+### 📝 Usage in Code
+Import the client library and call `post_state()`. The entity will be automatically created in Home Assistant on the first post.
+
+```python
+import homeassistant
+
+# Post state to HA (this creates/updates 'sensor.esp32_temperature')
+homeassistant.post_state(
+    sensor_id="esp32_temperature",
+    state_value=23.4,
+    friendly_name="Living Room Temperature",
+    unit_of_measurement="°C",
+    device_class="temperature"
+)
+```

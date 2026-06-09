@@ -35,6 +35,7 @@ except Exception as e:
     print(f"⚠️  Could not configure ADC sensor: {e}")
 
 counter = 0
+last_post_time = 0
 print("\nRunning main loop. Press Ctrl+C to stop.\n")
 
 try:
@@ -42,23 +43,36 @@ try:
         counter += 1
         
         if adc is not None:
-            # Read analog value (0 - 4095 on ESP32-C3 12-bit ADC)
-            raw_val = adc.read()
-            
-            # Convert to estimated moisture percentage (invert if sensor outputs high for dry)
-            # Typically, resistive/capacitive soil moisture sensors output:
-            #   ~2500 - 3200 (air/dry)
-            #   ~1000 - 1500 (fully wet in water)
-            # You can calibrate these values for your specific sensor:
-            dry_value = 3000
-            wet_value = 1200
-            
-            # Simple linear mapping to percent
-            moisture_percent = 100 * (dry_value - raw_val) / (dry_value - wet_value)
-            # Clamp percentage between 0 and 100
-            moisture_percent = max(0, min(100, moisture_percent))
-            
-            print(f"[{counter}] Soil Moisture Level: {moisture_percent:.1f}% (Raw ADC: {raw_val})")
+            try:
+                # Read analog value (0 - 4095 on ESP32-C3 12-bit ADC)
+                raw_val = adc.read()
+                
+                # Convert to estimated moisture percentage (invert if sensor outputs high for dry)
+                dry_value = 3000
+                wet_value = 1200
+                
+                # Simple linear mapping to percent
+                moisture_percent = 100 * (dry_value - raw_val) / (dry_value - wet_value)
+                # Clamp percentage between 0 and 100
+                moisture_percent = max(0, min(100, moisture_percent))
+                
+                print(f"[{counter}] Soil Moisture Level: {moisture_percent:.1f}% (Raw ADC: {raw_val})")
+                
+                # Post to Home Assistant at intervals (every 60 seconds)
+                if time.time() - last_post_time >= 60:
+                    import secrets
+                    import homeassistant
+                    
+                    homeassistant.post_state(
+                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_soil_moisture",
+                        state_value=f"{moisture_percent:.1f}",
+                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Soil Moisture",
+                        unit_of_measurement="%",
+                        device_class="humidity"
+                    )
+                    last_post_time = time.time()
+            except Exception as e:
+                print(f"     ⚠️  Error reading ADC or posting to HA: {e}")
         else:
             print(f"[{counter}] Heartbeat: ADC sensor is offline.")
             
