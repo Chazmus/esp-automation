@@ -84,6 +84,15 @@ while True:
             except Exception as e:
                 print(f"⚠️ Error powering off sensor: {e}")
 
+    # Measure Battery Voltage & Percentage (Auto-detected)
+    import battery
+    bat_voltage = battery.read_voltage()
+    bat_percent = battery.get_percentage(bat_voltage)
+    if bat_voltage is not None:
+        print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
+    else:
+        print("🔋 Battery sensing circuit not detected (or battery critically low). Skipping.")
+
     # --- 2. Connect to WiFi & Post State to Home Assistant ---
     if moisture_percent is not None:
         # Connect to WiFi
@@ -99,6 +108,23 @@ while True:
                     unit_of_measurement="%",
                     device_class="humidity"
                 )
+                
+                # Post Battery (if available)
+                if bat_voltage is not None and bat_percent is not None:
+                    homeassistant.post_state(
+                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery",
+                        state_value=f"{bat_percent:.1f}",
+                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Percentage",
+                        unit_of_measurement="%",
+                        device_class="battery"
+                    )
+                    homeassistant.post_state(
+                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery_voltage",
+                        state_value=f"{bat_voltage:.2f}",
+                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Voltage",
+                        unit_of_measurement="V",
+                        device_class="voltage"
+                    )
             except Exception as e:
                 print(f"⚠️ Failed to post to Home Assistant: {e}")
             finally:

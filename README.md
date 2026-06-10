@@ -210,6 +210,12 @@ Soil moisture sensors draw continuous current (~5mA) if wired directly to the 3.
 2. In [devices/soil_moisture/main.py](file:///home/cbailey/workspace/esp-automation/devices/soil_moisture/main.py), configure `POWER_PIN_NUMBER = 1`.
 3. The board will automatically supply power to the sensor, wait for it to stabilize, take readings, and then float the pin during deep sleep, reducing sleep current to just a few microamps!
 
+### 🔋 Battery Voltage & Percentage Sensing (Optional)
+The system includes automatic battery monitoring that reads the 18650's voltage and calculates its remaining percentage:
+1. **The Circuit:** Since the battery goes up to 4.2V but the ESP32-C3 ADC pins only read up to 3.3V, you must construct a **1:1 voltage divider** (e.g., using two **10kΩ** or **100kΩ** resistors). Connect the battery positive (`B+` or `OUT+` on the TP4056) to one resistor, Ground (`GND`) to the other, and connect their junction to **GPIO 3** (`ADC1_CH3`) on the ESP32-C3.
+2. **Auto-Detection (Fallback):** The firmware automatically sets a weak internal pull-down on GPIO 3 during startup to check if the pin is floating. If the voltage divider is not wired up, the pin will read `0V`. The code will automatically detect this (< 2.5V total battery), print a clean message to the REPL, and **bypass battery telemetry safely** without breaking the rest of the sensor readings! Once a connection is detected, it disables the internal pull-down to guarantee that its internal resistance doesn't skew your resistor divider ratio.
+3. **Home Assistant:** If connected, the battery percentage (`sensor.esp32_<device>_battery`) and voltage (`sensor.esp32_<device>_battery_voltage`) will be posted on every cycle.
+
 ### 📡 Debugging a Sleeping Node
 When a board is in deep sleep, it cannot accept programming/debugging commands. To flash new code or connect to the REPL, we have an **Auto-USB Host Detection Safeguard**:
 
