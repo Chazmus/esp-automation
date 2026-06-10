@@ -211,9 +211,13 @@ Soil moisture sensors draw continuous current (~5mA) if wired directly to the 3.
 3. The board will automatically supply power to the sensor, wait for it to stabilize, take readings, and then float the pin during deep sleep, reducing sleep current to just a few microamps!
 
 ### 📡 Debugging a Sleeping Node
-When a board is in deep sleep, it cannot accept programming/debugging commands. To flash new code or connect to the REPL:
-1. Press the physical **EN / RST** button on the ESP32-C3 board to reset it.
-2. Run your deployment command or open the REPL during the **5-second safeguard delay** before the board goes to sleep:
+When a board is in deep sleep, it cannot accept programming/debugging commands. To flash new code or connect to the REPL, we have an **Auto-USB Host Detection Safeguard**:
+
+1. **Auto-Detect USB Connection (Recommended):**
+   If the ESP32-C3 is connected to an active USB host (like your computer), it automatically detects the USB connection via the hardware registers and skips deep sleep entirely. This keeps the REPL fully accessible and lets you deploy code easily at any time.
+
+2. **Manual Reset Safeguard (Fallback):**
+   If the auto-detect does not trigger (e.g., if you are powering it through a passive power source but want to connect), press the physical **EN / RST** button on the ESP32-C3 board to reset it. Run your deployment command or open the REPL during the **5-second safeguard delay** before the board attempts to sleep:
    ```bash
    python3 scripts/deploy.py temp_humidity
    ```
