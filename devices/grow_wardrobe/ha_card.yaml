@@ -1,0 +1,72 @@
+# Home Assistant Picture Elements Card Configuration
+# Place this YAML inside a 'Manual' Lovelace card in your dashboard.
+# Make sure to upload growdrobe.jpg to /config/www/growdrobe.jpg first.
+
+type: picture-elements
+image: /local/growdrobe.jpg
+elements:
+  # 1. Temperature Sensor 1 (Growdrobe Ambient)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_temp
+    prefix: 'Temp: '
+    style:
+      top: 25%
+      left: 30%
+      color: white
+      font-size: 14px
+      font-weight: bold
+      background-color: 'rgba(0, 0, 0, 0.6)'
+      padding: 6px
+      border-radius: 4px
+
+  # 2. Relative Humidity Sensor
+  - type: state-label
+    entity: sensor.esp32_growdrobe_humidity
+    prefix: 'Humidity: '
+    style:
+      top: 35%
+      left: 30%
+      color: white
+      font-size: 14px
+      font-weight: bold
+      background-color: 'rgba(0, 0, 0, 0.6)'
+      padding: 6px
+      border-radius: 4px
+
+  # 3. Soil Moisture (%)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_moisture
+    prefix: 'Soil Moisture: '
+    style:
+      top: 75%
+      left: 50%
+      color: white
+      font-size: 14px
+      font-weight: bold
+      background-color: 'rgba(0, 100, 250, 0.7)'
+      padding: 6px
+      border-radius: 4px
+
+  # 4. Fan Speed Status (Future Integration)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_fan_speed
+    prefix: 'Fan Speed: '
+    style:
+      top: 15%
+      left: 70%
+      color: white
+      font-size: 14px
+      font-weight: bold
+      background-color: 'rgba(0, 0, 0, 0.6)'
+      padding: 6px
+      border-radius: 4px
+
+  # 5. Interactive Light Switch (Future Integration)
+  - type: state-icon
+    entity: switch.esp32_growdrobe_light
+    tap_action:
+      action: toggle
+    style:
+      top: 15%
+      left: 15%
+      --paper-item-icon-color: yellow
