@@ -60,8 +60,16 @@ def connect():
         print(f"⚠️ Could not set txpower: {e}")
         
     # 5. Connect
+    if hasattr(secrets, "WIFI_STATIC_IP") and secrets.WIFI_STATIC_IP:
+        try:
+            wlan.ifconfig(secrets.WIFI_STATIC_IP)
+            print(f"✅ Configured static IP: {secrets.WIFI_STATIC_IP[0]}")
+        except Exception as e:
+            print(f"⚠️ Could not set static IP configuration: {e}")
+            
     print(f"Connecting to WiFi network '{ssid}'...")
     wlan.connect(ssid, password)
+
     
     # 6. Wait for connection or timeout (15 seconds)
     timeout = 15
