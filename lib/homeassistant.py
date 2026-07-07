@@ -2,6 +2,24 @@ import urequests
 import json
 import secrets
 
+def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of_measurement=None, device_class=None):
+    """
+    Helper function to post a sensor state for the current device.
+    Automatically prepends 'esp32_{secrets.DEVICE_NAME}_' to the sensor ID
+    and 'ESP32 {secrets.DEVICE_NAME} ' to the friendly name.
+    """
+    sensor_id = f"esp32_{secrets.DEVICE_NAME}_{sensor_suffix}"
+    friendly_name = f"ESP32 {secrets.DEVICE_NAME} {friendly_suffix}" if friendly_suffix else None
+
+    return post_state(
+        sensor_id=sensor_id,
+        state_value=state_value,
+        friendly_name=friendly_name,
+        unit_of_measurement=unit_of_measurement,
+        device_class=device_class
+    )
+
+
 def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=None, device_class=None):
     """
     Posts a sensor state to Home Assistant's REST API.
