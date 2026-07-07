@@ -34,12 +34,13 @@ def read_voltage():
         time.sleep_ms(10) # Let voltage settle to its true un-loaded value
         
         # 3. Take multiple readings and average them to filter out ESP32 ADC noise
-        readings = []
-        for _ in range(5):
+        total_uv = 0
+        num_readings = 5
+        for _ in range(num_readings):
             # read_uv() uses factory-calibrated eFuse values to return voltage in microvolts
-            readings.append(adc.read_uv())
+            total_uv += adc.read_uv()
             time.sleep_ms(10)
-        avg_uv = sum(readings) / len(readings)
+        avg_uv = total_uv / num_readings
         
         # Convert microvolts to volts
         pin_voltage = avg_uv / 1_000_000.0
