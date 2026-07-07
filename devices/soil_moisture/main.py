@@ -4,6 +4,9 @@ import time
 import secrets
 import wifi
 import homeassistant
+import battery
+import network
+import usb
 
 print("\n========================================")
 print(f"ESP32-C3 Soil Moisture Node: {secrets.DEVICE_NAME}")
@@ -85,7 +88,6 @@ while True:
                 print(f"⚠️ Error powering off sensor: {e}")
 
     # Measure Battery Voltage & Percentage (Auto-detected)
-    import battery
     bat_voltage = battery.read_voltage()
     bat_percent = battery.get_percentage(bat_voltage)
     if bat_voltage is not None:
@@ -130,7 +132,6 @@ while True:
             finally:
                 # Explicitly disconnect and turn off WiFi interface to shut down the radio cleanly
                 try:
-                    import network
                     wlan = network.WLAN(network.STA_IF)
                     wlan.active(False)
                     print("📶 WiFi interface shut down.")
@@ -145,7 +146,6 @@ while True:
     # Configure deep sleep/loop duration (15 minutes = 900 seconds)
     sleep_seconds = 900
 
-    import usb
     if usb.is_usb_connected():
         print(f"🔌 USB connection detected! Staying awake. Sleeping {sleep_seconds} seconds before next reading...")
         time.sleep(sleep_seconds)
