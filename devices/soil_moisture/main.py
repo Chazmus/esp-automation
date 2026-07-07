@@ -101,27 +101,27 @@ while True:
         if wifi_connected:
             try:
                 # Post Soil Moisture
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_soil_moisture",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="soil_moisture",
                     state_value=f"{moisture_percent:.1f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Soil Moisture",
+                    friendly_suffix="Soil Moisture",
                     unit_of_measurement="%",
                     device_class="humidity"
                 )
                 
                 # Post Battery (if available)
                 if bat_voltage is not None and bat_percent is not None:
-                    homeassistant.post_state(
-                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery",
+                    homeassistant.post_device_sensor(
+                        sensor_suffix="battery",
                         state_value=f"{bat_percent:.1f}",
-                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Percentage",
+                        friendly_suffix="Battery Percentage",
                         unit_of_measurement="%",
                         device_class="battery"
                     )
-                    homeassistant.post_state(
-                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery_voltage",
+                    homeassistant.post_device_sensor(
+                        sensor_suffix="battery_voltage",
                         state_value=f"{bat_voltage:.2f}",
-                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Voltage",
+                        friendly_suffix="Battery Voltage",
                         unit_of_measurement="V",
                         device_class="voltage"
                     )
