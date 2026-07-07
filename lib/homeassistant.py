@@ -62,7 +62,7 @@ def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=N
         if response is not None:
             try:
                 response.close()
-            except:
+            except Exception:
                 pass
                 
     return success
