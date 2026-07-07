@@ -2,17 +2,18 @@ import network
 import time
 import secrets
 
+STATUS_MAP = {
+    1000: "STAT_IDLE",
+    1001: "STAT_CONNECTING",
+    202: "STAT_WRONG_PASSWORD",
+    201: "STAT_NO_AP_FOUND",
+    203: "STAT_ASSOC_FAIL",
+    204: "STAT_HANDSHAKE_TIMEOUT",
+    1010: "STAT_GOT_IP"
+}
+
 def get_status_desc(status):
-    status_map = {
-        1000: "STAT_IDLE",
-        1001: "STAT_CONNECTING",
-        202: "STAT_WRONG_PASSWORD",
-        201: "STAT_NO_AP_FOUND",
-        203: "STAT_ASSOC_FAIL",
-        204: "STAT_HANDSHAKE_TIMEOUT",
-        1010: "STAT_GOT_IP"
-    }
-    return status_map.get(status, f"UNKNOWN ({status})")
+    return STATUS_MAP.get(status, f"UNKNOWN ({status})")
 
 def connect():
     """
