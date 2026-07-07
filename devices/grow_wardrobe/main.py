@@ -91,28 +91,28 @@ while True:
             print("Syncing measurements with Home Assistant...")
             # 1. Post Temperature
             if temp is not None:
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_temp",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="temp",
                     state_value=f"{temp:.2f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Temperature",
+                    friendly_suffix="Temperature",
                     unit_of_measurement="°C",
                     device_class="temperature"
                 )
             # 2. Post Humidity
             if humidity is not None:
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_humidity",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="humidity",
                     state_value=f"{humidity:.2f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Humidity",
+                    friendly_suffix="Humidity",
                     unit_of_measurement="%",
                     device_class="humidity"
                 )
             # 3. Post Soil Moisture
             if moisture_pct is not None:
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_moisture",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="moisture",
                     state_value=f"{moisture_pct:.1f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Soil Moisture",
+                    friendly_suffix="Soil Moisture",
                     unit_of_measurement="%",
                     device_class="humidity"
                 )

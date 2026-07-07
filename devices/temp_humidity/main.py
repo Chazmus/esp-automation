@@ -68,35 +68,35 @@ while True:
         if wifi_connected:
             try:
                 # Post Temperature
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_temp",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="temp",
                     state_value=f"{temp:.2f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Temperature",
+                    friendly_suffix="Temperature",
                     unit_of_measurement="°C",
                     device_class="temperature"
                 )
                 # Post Humidity
-                homeassistant.post_state(
-                    sensor_id=f"esp32_{secrets.DEVICE_NAME}_humidity",
+                homeassistant.post_device_sensor(
+                    sensor_suffix="humidity",
                     state_value=f"{humidity:.2f}",
-                    friendly_name=f"ESP32 {secrets.DEVICE_NAME} Humidity",
+                    friendly_suffix="Humidity",
                     unit_of_measurement="%",
                     device_class="humidity"
                 )
                 
                 # Post Battery (if available)
                 if bat_voltage is not None and bat_percent is not None:
-                    homeassistant.post_state(
-                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery",
+                    homeassistant.post_device_sensor(
+                        sensor_suffix="battery",
                         state_value=f"{bat_percent:.1f}",
-                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Percentage",
+                        friendly_suffix="Battery Percentage",
                         unit_of_measurement="%",
                         device_class="battery"
                     )
-                    homeassistant.post_state(
-                        sensor_id=f"esp32_{secrets.DEVICE_NAME}_battery_voltage",
+                    homeassistant.post_device_sensor(
+                        sensor_suffix="battery_voltage",
                         state_value=f"{bat_voltage:.2f}",
-                        friendly_name=f"ESP32 {secrets.DEVICE_NAME} Battery Voltage",
+                        friendly_suffix="Battery Voltage",
                         unit_of_measurement="V",
                         device_class="voltage"
                     )
