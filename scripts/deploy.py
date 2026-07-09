@@ -22,6 +22,9 @@ def webrepl_soft_reset(project_root, ip, password):
         webrepl_cli.client_handshake(s)
         ws = webrepl_cli.websocket(s)
         webrepl_cli.login(ws, password)
+        # Send Ctrl+C to interrupt any running script
+        ws.write(b"\x03", frame=0x81)
+        time.sleep(0.5)
         # Send Ctrl+D (soft reboot) using text frame (0x81)
         ws.write(b"\x04", frame=0x81)
         print("🔄 WebREPL soft-reset command sent successfully.")
