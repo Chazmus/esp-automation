@@ -121,7 +121,7 @@ The fan speed is modulated using a 25 kHz PWM signal. The duty cycle is dynamica
 *   **Status**: Low priority. The ESP32-C3 can manage this via an internal real-time clock (syncing time via NTP on boot) or a home automation script, but a mechanical/smart plug timer can serve as a physical backup.
 
 ### 3. Irrigation System (Fresh Reservoir)
-*   **Agitation Pump**: Runs 24/7. Prevents concentrated liquid nutrients from settling out of suspension.
+*   **Agitation Pump**: Runs on a scheduled timer (e.g., 2 minutes every hour, or for 5 minutes immediately prior to an irrigation event) to prevent concentrated liquid nutrients from settling out of suspension while avoiding heating the water.
 *   **Irrigation Pump**: Runs on a strict interval timer.
     *   *Default Schedule*: 15 seconds every 4 hours (adjustable based on plant size).
     *   *Volume Target*: Calculated to supply enough water to saturate the coco coir and yield a ~10-20% runoff volume.
@@ -143,7 +143,7 @@ The fan speed is modulated using a 25 kHz PWM signal. The duty cycle is dynamica
 
 To prevent water damage, pump burn-outs, or crop loss, the following failsafes are integrated into the design:
 
-1.  **Inductive Kickback Protection**: Submersible pumps are inductive loads. Toggling them off creates a large negative voltage spike. A **flyback diode (1N4007)** must be soldered across the terminals of both the irrigation and runoff pumps to redirect this energy safely.
+1.  **Inductive Kickback & Contact Protection**: Although the opto-isolated relay board protects the ESP32's digital pins from high-voltage spikes, turning off inductive pump motors still causes arcing (sparks) across the relay's mechanical contacts. Soldering a **flyback diode (1N4007)** in parallel across each pump's motor terminals is still highly recommended to prevent arcing (which degrades and pits the relay contacts over time) and to suppress high-frequency electromagnetic interference (EMI) that can cause the ESP32 to freeze.
 2.  **Dry-Run Pump Protection**: Submersible and diaphragm pumps can burn out if run dry for extended periods. The firmware enforces maximum run times (e.g., irrigation pump cannot run for >45 seconds continuously; runoff pump cannot run for >3 minutes continuously).
 3.  **Runoff Waste Bucket Level Switch (Crucial Addition)**: If the waste bucket fills up, runoff water will overflow onto the floor. Installing a simple **float switch** in the lid of the 10L waste bucket wired to an ESP32 GPIO allows the controller to immediately disable irrigation and sound an alarm if the bucket is full.
 4.  **Hardware Watchdog Timer (WDT)**: ESP32-C3 firmware may lock up due to WiFi drops or electrical noise. Enabling a hardware watchdog timer in MicroPython (`machine.WDT`) ensures that if the system hangs, it will automatically reboot within 10-15 seconds rather than leaving a pump stuck in the "ON" state.
