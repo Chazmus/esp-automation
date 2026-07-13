@@ -45,8 +45,24 @@ def run(config):
             num_samples=cfg.get("num_samples", 5)
         )
 
+    # Initialize actuators if configured
+    fan = None
+    if getattr(config, "PWM_FAN", None):
+        from lib.drivers.fan import PWMFan
+        cfg = config.PWM_FAN
+        fan = PWMFan(pin=cfg["pin"], freq=cfg.get("freq", 25000))
+        
+    light_relay = None
+    if getattr(config, "LIGHT_RELAY", None):
+        from lib.drivers.relay import Relay
+        cfg = config.LIGHT_RELAY
+        light_relay = Relay(pin=cfg["pin"])
+
     # Main Loop
     while True:
+        sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
+        deep_sleep_enabled = getattr(config, "DEEP_SLEEP_ENABLED", False)
+        
         # --- 1. Read Sensors BEFORE WiFi ---
         temp, humidity = None, None
         if temp_sensor is not None:
@@ -70,7 +86,22 @@ def run(config):
         else:
             print("🔋 Battery sensing circuit not detected. Skipping.")
 
-        # --- 2. WiFi Sync and Posting ---
+        # --- 2. Actuator Control ---
+        if fan is not None and temp is not None:
+            cfg = config.PWM_FAN
+            if temp > cfg.get("target_temp", 28.0):
+                fan.set_speed(100)
+                print("💨 Fan speed set to 100% (temperature high)")
+            else:
+                fan.set_speed(30)
+                print("💨 Fan speed set to 30% (temperature normal)")
+                
+        if light_relay is not None:
+            # Placeholder: Keep light relay turned on. Customize scheduling logic here.
+            light_relay.on()
+            print("💡 Light Relay state: ON")
+
+        # --- 3. WiFi Sync and Posting ---
         has_data = (temp is not None) or (moisture_pct is not None) or (bat_voltage is not None)
         if has_data:
             print("Connecting to WiFi...")
@@ -118,22 +149,22 @@ def run(config):
                 except Exception as e:
                     print(f"⚠️ Failed to post to Home Assistant: {e}")
                 finally:
-                    # Cleanly shut down WiFi radio to conserve power
-                    try:
-                        wlan = network.WLAN(network.STA_IF)
-                        wlan.active(False)
-                        print("📶 WiFi interface shut down.")
-                    except Exception as e:
-                        print(f"⚠️ Failed to disable WiFi: {e}")
+                    # Cleanly shut down WiFi radio to conserve power only if deep sleep is enabled
+                    if deep_sleep_enabled:
+                        try:
+                            wlan = network.WLAN(network.STA_IF)
+                            wlan.active(False)
+                            print("📶 WiFi interface shut down.")
+                        except Exception as e:
+                            print(f"⚠️ Failed to disable WiFi: {e}")
+                    else:
+                        print("📶 Staying connected (Deep Sleep disabled).")
             else:
                 print("❌ WiFi connection failed. Skipping HA post.")
         else:
             print("⚠️ Skipping WiFi connection and HA post due to lack of sensor readings.")
 
         # --- 3. Sleep / Deep Sleep Cycle ---
-        sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
-        deep_sleep_enabled = getattr(config, "DEEP_SLEEP_ENABLED", False)
-
         if deep_sleep_enabled and not usb.is_usb_connected():
             print(f"💤 Entering Deep Sleep for {sleep_seconds} seconds...")
             time.sleep_ms(100) # Let print buffers clear

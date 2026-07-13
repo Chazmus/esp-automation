@@ -21,3 +21,14 @@ SOIL_MOISTURE_SENSOR = {
     "power_pin": None,
     "num_samples": 5
 }
+
+# Actuator configuration
+PWM_FAN = {
+    "pin": 12,
+    "freq": 25000,
+    "target_temp": 28.0  # fan runs at 100% above this, 30% below
+}
+
+LIGHT_RELAY = {
+    "pin": 13
+}

@@ -28,17 +28,23 @@ def connect():
         print("⚠️  WiFi SSID is still set to placeholder values. Please update lib/secrets.py.")
         return False
         
-    # 1. Set country code (GB based on timezone BST +01:00)
+    # 2. Initialize the Station Interface
+    wlan = network.WLAN(network.STA_IF)
+    
+    # If already connected, skip resetting and reconnecting to keep connections (like WebREPL) alive
+    if wlan.isconnected():
+        print("✅ Already connected to WiFi!")
+        print("   IP Configuration:", wlan.ifconfig())
+        return True
+
+    # 3. Set country code (GB based on timezone BST +01:00)
     try:
         network.country('GB')
         print("✅ Country code set to GB")
     except Exception as e:
         print(f"⚠️ Could not set country code: {e}")
-        
-    # 2. Initialize the Station Interface
-    wlan = network.WLAN(network.STA_IF)
-    
-    # 3. Toggle the interface to ensure a clean stack state
+
+    # 4. Toggle the interface to ensure a clean stack state
     print("🔄 Resetting WLAN interface...")
     wlan.active(False)
     time.sleep(0.5)

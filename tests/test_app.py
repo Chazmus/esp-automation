@@ -235,3 +235,63 @@ class TestApp:
             unit_of_measurement="%",
             device_class="humidity"
         )
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
+    def test_run_always_on_loop_with_actuators(self, mock_sleep_ms, mock_sleep):
+        # Simulates a continuous loop device with actuators configured
+        class MockConfig:
+            DEVICE_NAME = "test_grow_wardrobe"
+            DEEP_SLEEP_ENABLED = False
+            SLEEP_SECONDS = 10
+            TEMP_HUMIDITY_SENSOR = {
+                "sda": 5,
+                "scl": 6,
+                "type": "AHT20"
+            }
+            SOIL_MOISTURE_SENSOR = None
+            PWM_FAN = {
+                "pin": 12,
+                "freq": 25000,
+                "target_temp": 28.0
+            }
+            LIGHT_RELAY = {
+                "pin": 13
+            }
+
+        # Mock TempHumiditySensor reading
+        sensor_instance = MagicMock()
+        sensor_instance.temperature = 30.5  # Temp > 28.0 (should set fan to 100%)
+        sensor_instance.relative_humidity = 50.0
+        ahtx0_mock.AHT20.return_value = sensor_instance
+
+        # Pin and PWM mock setup
+        machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
+        pwm_instance = MagicMock()
+        machine_mock.PWM.return_value = pwm_instance
+
+        class LoopComplete(BaseException):
+            pass
+        
+        def sleep_ms_side_effect(ms):
+            if wifi_mock.connect.called:
+                raise LoopComplete()
+        
+        time_mock.sleep_ms.side_effect = sleep_ms_side_effect
+
+        from lib.app import run
+        with pytest.raises(LoopComplete):
+            run(MockConfig)
+
+        # Verify fan speed was set to 100% (temperature high: 30.5)
+        # MicroPython PWM duty is 10-bit: 100% -> 1023
+        pwm_instance.duty.assert_called_with(1023)
+
+        # Verify HA post of temperature
+        homeassistant_mock.post_device_sensor.assert_any_call(
+            sensor_suffix="temp",
+            state_value="30.50",
+            friendly_suffix="Temperature",
+            unit_of_measurement="°C",
+            device_class="temperature"
+        )
