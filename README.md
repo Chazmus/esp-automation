@@ -1,8 +1,8 @@
 # ESP32-C3 MicroPython Fleet Development Guide
 
-Welcome to your modular, multi-board MicroPython workspace! This project is organized using a **Shared Core + Selective Deployment (Strategy 1)** architecture. 
+Welcome to your modular, multi-board MicroPython workspace! This project is organized using a **Modular, Config-Driven Architecture (Approach 2 + 3)**.
 
-This design allows you to maintain multiple different devices (such as a Temperature/Humidity sensor and a Soil Moisture monitor) in the same codebase while sharing common helper modules, libraries, and utilities.
+Instead of maintaining duplicated loops and helper logic on each device, all execution logic, driver communication, WiFi management, and Home Assistant synchronization are housed in the shared core library ([lib/](file:///home/cbailey/workspace/esp-automation/lib/)). Individual devices under `devices/` are defined purely by configuration parameters in a `config.py` file, keeping the target scripts clean and maintainable.
 
 ---
 
@@ -10,30 +10,51 @@ This design allows you to maintain multiple different devices (such as a Tempera
 
 ```text
 ├── .venv/                      # Host Python virtual environment (type stubs)
+├── .github/workflows/          # CI/CD GitHub Actions workflows
 ├── firmware/                   # MicroPython firmware binaries (.bin)
 ├── pyrightconfig.json          # Configuration for Neovim / Pyright LSP
 ├── README.md                   # This guide
 │
 ├── lib/                        # SHARED core libraries (deployed to ALL boards)
-│   ├── ahtx0.py                # Reusable AHT20 sensor driver
+│   ├── app.py                  # Unified execution engine (main runner loop)
+│   ├── battery.py              # Battery telemetry and voltage monitoring
 │   ├── homeassistant.py        # Client library to post data to Home Assistant REST API
-│   ├── secrets.py.example      # Template for WiFi credentials (copy to secrets.py)
-│   └── wifi.py                 # Shared connection utility (modem stability optimized)
+│   ├── usb.py                  # Auto-USB connection detection helper
+│   ├── wifi.py                 # WiFi manager (modem stability & connection-retention optimized)
+│   ├── secrets.py.example      # Template for credentials (copy to secrets.py)
+│   │
+│   └── drivers/                # Unified hardware driver classes
+│       ├── ahtx0.py            # Raw AHT10/AHT20 driver dependency
+│       ├── temp_humidity.py    # Abstraction for AHT10/AHT20 sensors
+│       ├── soil_moisture.py    # Abstraction for capacitive soil moisture sensors
+│       ├── fan.py              # PWM-based fan controller
+│       └── relay.py            # Simple digital GPIO on/off relay controller
 │
 ├── devices/                    # INDIVIDUAL DEVICE NODE SCHEMAS
 │   │
-│   ├── temp_humidity/          # Device #1: Air Temperature & Humidity
+│   ├── temp_humidity/          # Device #1: Air Temperature & Humidity Node
 │   │   ├── boot.py             # Startup configuration for Device 1
-│   │   └── main.py             # Target script (imports ahtx0 and reads over I2C)
+│   │   ├── config.py           # Configuration parameters (pinouts, intervals)
+│   │   └── main.py             # Bootstrapper (delegates execution to lib.app)
 │   │
-│   └── soil_moisture/          # Device #2: Analog Soil Moisture Monitor
-│       ├── boot.py             # Startup configuration for Device 2
-│       └── main.py             # Target script (reads from ADC pins)
+│   └── grow_wardrobe/          # Device #2: Multi-sensor & Multi-actuator Controller
+│       ├── boot.py             # Startup configuration (starts WebREPL server)
+│       ├── config.py           # Configuration parameters (sensors, fan, relay pins)
+│       ├── ha_card.yaml        # Home Assistant dashboard card configuration template
+│       ├── main.py             # Bootstrapper (delegates execution to lib.app)
+│       └── README.md           # Documentation specific to grow wardrobe
 │
-└── scripts/                    # Workflow automation utilities
-    ├── deploy.py               # Selective deployer (takes device target argument)
-    ├── repl.py                 # Monitors board output & opens interactive REPL
-    └── status.py               # Queries board metadata and active files
+├── scripts/                    # Host workflow automation utilities
+│   ├── deploy.py               # Selective deployer (copies shared core & configures board)
+│   ├── repl.py                 # Monitors board output & opens interactive REPL
+│   ├── status.py               # Queries board metadata and active files
+│   └── webrepl_cli.py          # Command line tool for remote OTA file syncs
+│
+└── tests/                      # Pytest unit testing suite (simulates MicroPython stack)
+    ├── test_app.py             # Tests the unified main execution engine
+    ├── test_battery.py         # Tests battery measurement calculations
+    ├── test_homeassistant.py   # Tests HA integration REST API payloads
+    └── test_wifi.py            # Tests WiFi status translations
 ```
 
 ---
@@ -57,7 +78,7 @@ Uses **Analog input (ADC)** to read soil resistance:
 
 | Soil Moisture Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
 | :--- | :--- | :--- | :--- |
-| **VCC** | Red | **3.3V** | Power supply |
+| **VCC** | Red | **3.3V** (or **GPIO 1** for power gating) | Power supply |
 | **GND** | Black | **GND** | Ground |
 | **AO** (Analog Out) | Blue | **GPIO 0** | Analog input (ADC1_CH0) |
 
@@ -68,14 +89,14 @@ Uses **Analog input (ADC)** to read soil resistance:
 Host commands are located inside the `scripts/` directory. They are designed to auto-detect which USB port your ESP32-C3 is plugged into and automatically manage serial permissions.
 
 ### 📤 Deploy / Flash Selective Devices
-To flash a specific device, pass the device directory name as an argument. The deployer will automatically copy all files inside `lib/` to `/lib/` on the board, upload the device's specific files to `/`, and soft-reset the processor:
+To flash a specific device, pass the device directory name as an argument. The deployer will automatically copy all files inside `lib/` to `/lib/` on the board, upload the files inside the device's directory (such as `main.py`, `boot.py`, and renaming `config.py` to root `/config.py`), and soft-reset the processor:
 
 ```bash
 # Deploy the Temperature & Humidity node
 python3 scripts/deploy.py temp_humidity
 
-# Deploy the Soil Moisture monitor
-python3 scripts/deploy.py soil_moisture
+# Deploy the Grow Wardrobe controller
+python3 scripts/deploy.py grow_wardrobe
 ```
 
 *If you do not provide an argument, the deployer will print a list of all available device folders in your project.*
@@ -95,11 +116,65 @@ python3 scripts/status.py
 
 ---
 
-## 3. Understanding the Shared Code Pattern
+## 3. How the Config-Driven Pattern Works
 
-*   **`lib/`**: Contains core modules that can be imported by *any* device. When you run `python3 scripts/deploy.py <device>`, everything in `lib/` is placed inside the ESP32's `/lib/` folder. MicroPython's import subsystem automatically searches `/lib/` by default.
-    *   *Example:* Inside `devices/temp_humidity/main.py`, you can run `import ahtx0` directly even though the library is kept in the shared folder!
-*   **`devices/`**: Contains completely separate device configurations. They have their own `boot.py` and `main.py` files. They run as fully independent programs once deployed.
+### Root Bootstrapper
+For all devices, `main.py` is identical and extremely clean:
+```python
+import config
+from lib.app import run
+
+run(config)
+```
+
+### Device Configuration (`config.py`)
+Each board specifies its physical characteristics, attached peripherals, and execution settings. 
+
+For instance, the **Temperature & Humidity Node** ([devices/temp_humidity/config.py](file:///home/cbailey/workspace/esp-automation/devices/temp_humidity/config.py)):
+```python
+import secrets
+
+DEVICE_NAME = secrets.DEVICE_NAME
+DEEP_SLEEP_ENABLED = True
+SLEEP_SECONDS = 900 # Sleep 15 mins
+
+TEMP_HUMIDITY_SENSOR = {
+    "sda": 5,
+    "scl": 6,
+    "type": "AHT20"
+}
+SOIL_MOISTURE_SENSOR = None
+```
+
+Whereas the complex **Grow Wardrobe Node** ([devices/grow_wardrobe/config.py](file:///home/cbailey/workspace/esp-automation/devices/grow_wardrobe/config.py)):
+```python
+import secrets
+
+DEVICE_NAME = secrets.DEVICE_NAME
+DEEP_SLEEP_ENABLED = False  # Continuous execution
+SLEEP_SECONDS = 10         # Cycle interval
+
+TEMP_HUMIDITY_SENSOR = {
+    "sda": 5,
+    "scl": 6,
+    "type": "AHT10"
+}
+SOIL_MOISTURE_SENSOR = {
+    "adc_pin": 0,
+    "dry": 3800,
+    "wet": 1275,
+    "power_pin": None,
+    "num_samples": 5
+}
+PWM_FAN = {
+    "pin": 12,
+    "freq": 25000,
+    "target_temp": 28.0
+}
+LIGHT_RELAY = {
+    "pin": 13
+}
+```
 
 ---
 
@@ -133,36 +208,24 @@ sudo usermod -aG uucp $USER
 
 ---
 
-## 5. WiFi Configuration
-
-Both the Temperature/Humidity and Soil Moisture devices are pre-configured to connect to WiFi on boot using a shared network module.
+## 5. WiFi Configuration & OTA WebREPL
 
 ### 🔑 Credentials Setup
 1. Copy the template secrets file:
    ```bash
    cp lib/secrets.py.example lib/secrets.py
    ```
-2. Open the newly created [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) and fill in your WiFi details:
+2. Open the newly created [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) and fill in your WiFi details and credentials:
    ```python
    WIFI_SSID = "your-wifi-name"
    WIFI_PASSWORD = "your-wifi-password"
+   WEBREPL_PASSWORD = "your-webrepl-password"
    ```
    *Note: [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) is ignored by Git to keep your network credentials secure.*
 
-### 🛠️ Connection Stability Tuning
-Under the hood, [lib/wifi.py](file:///home/cbailey/workspace/esp-automation/lib/wifi.py) is pre-configured with the following hardware adjustments for the ESP32-C3:
-* **Modem Power Management (`pm=PM_NONE`)**: Disabled to prevent packet dropouts during the router's WPA2/WPA3 4-way handshake.
-* **Reduced Transmit Power (`txpower=5`)**: Lowered to prevent current draw spikes from causing voltage brownouts and RF transceiver instability.
-* **Country Code (`network.country('GB')`)**: Configured for local regulatory compliance and clean channel scanning.
-
-### 📝 Usage in Code
-To connect any new device node, simply import the helper at the top of your `main.py`:
-```python
-import wifi
-
-# Connect on boot
-wifi.connect()
-```
+### 📡 Always-On vs. Deep Sleep WiFi Logic
+* **Always-On Nodes (e.g., Grow Wardrobe):** The firmware maintains a persistent WiFi network stack and avoids active interface toggles between measurement cycles. This prevents WebREPL connections from dropping, keeping remote REPL control and OTA updates stable.
+* **Deep Sleep Nodes (e.g., Temperature & Humidity):** To minimize power consumption, the WiFi radio is actively shut down (`wlan.active(False)`) immediately after posting telemetry data, before the device enters hardware sleep mode.
 
 ---
 
@@ -178,53 +241,23 @@ This project includes a shared client module **`lib/homeassistant.py`** to post 
    HA_TOKEN = "your-long-lived-access-token"
    ```
 
-### 📝 Usage in Code
-Import the client library and call `post_state()`. The entity will be automatically created in Home Assistant on the first post.
-
-```python
-import homeassistant
-
-# Post state to HA (this creates/updates 'sensor.esp32_temperature')
-homeassistant.post_state(
-    sensor_id="esp32_temperature",
-    state_value=23.4,
-    friendly_name="Living Room Temperature",
-    unit_of_measurement="°C",
-    device_class="temperature"
-)
-```
+Telemetry payloads are automatically structured and posted inside [lib/app.py](file:///home/cbailey/workspace/esp-automation/lib/app.py) using the configured `DEVICE_NAME` prefix. The entities are created in Home Assistant on the first successful telemetry post.
 
 ---
 
 ## 7. Deep Sleep & Battery Optimization
 
-Both device nodes are optimized for long-term battery operation using an 18650 cell.
-
 ### 💤 Deep Sleep Behavior
-* The nodes boot, read sensor data, connect to WiFi, post to Home Assistant, and then enter deep sleep for **15 minutes** (900 seconds).
-* To prevent battery waste, the **5-second deployment safeguard delay** is only active on a cold boot or manual hardware reset (`machine.reset_cause() != machine.DEEPSLEEP_RESET`). Wakes from deep sleep start measurements instantly.
+* For nodes with `DEEP_SLEEP_ENABLED = True`, the board boots, reads the sensors, connects to WiFi, posts to Home Assistant, and then enters deep sleep.
+* To prevent battery waste, the **5-second deployment safeguard delay** is only active on a cold boot or manual hardware reset (`machine.reset_cause() != machine.DEEPSLEEP_RESET`). Waking from deep sleep triggers sensor read cycles instantly.
 
 ### 🔌 Battery-Saving GPIO Power-Gating (Soil Moisture)
-Soil moisture sensors draw continuous current (~5mA) if wired directly to the 3.3V power rail. To prevent this, you can control the sensor's power via a GPIO pin:
+Soil moisture sensors draw continuous current if wired directly to the 3.3V power rail. To prevent this, you can configure a `power_pin` in your sensor dictionary:
 1. Connect the sensor's **VCC** pin to **GPIO 1** instead of the 3.3V rail.
-2. In [devices/soil_moisture/main.py](file:///home/cbailey/workspace/esp-automation/devices/soil_moisture/main.py), configure `POWER_PIN_NUMBER = 1`.
+2. In your device's config dictionary, set `"power_pin": 1`.
 3. The board will automatically supply power to the sensor, wait for it to stabilize, take readings, and then float the pin during deep sleep, reducing sleep current to just a few microamps!
 
 ### 🔋 Battery Voltage & Percentage Sensing (Optional)
 The system includes automatic battery monitoring that reads the 18650's voltage and calculates its remaining percentage:
-1. **The Circuit:** Since the battery goes up to 4.2V but the ESP32-C3 ADC pins only read up to 3.3V, you must construct a **1:1 voltage divider** (e.g., using two **10kΩ** or **100kΩ** resistors). Connect the battery positive (`B+` or `OUT+` on the TP4056) to one resistor, Ground (`GND`) to the other, and connect their junction to **GPIO 3** (`ADC1_CH3`) on the ESP32-C3.
-2. **Auto-Detection (Fallback):** The firmware automatically sets a weak internal pull-down on GPIO 3 during startup to check if the pin is floating. If the voltage divider is not wired up, the pin will read `0V`. The code will automatically detect this (< 2.5V total battery), print a clean message to the REPL, and **bypass battery telemetry safely** without breaking the rest of the sensor readings! Once a connection is detected, it disables the internal pull-down to guarantee that its internal resistance doesn't skew your resistor divider ratio.
-3. **Home Assistant:** If connected, the battery percentage (`sensor.esp32_<device>_battery`) and voltage (`sensor.esp32_<device>_battery_voltage`) will be posted on every cycle.
-
-### 📡 Debugging a Sleeping Node
-When a board is in deep sleep, it cannot accept programming/debugging commands. To flash new code or connect to the REPL, we have an **Auto-USB Host Detection Safeguard**:
-
-1. **Auto-Detect USB Connection (Recommended):**
-   If the ESP32-C3 is connected to an active USB host (like your computer), it automatically detects the USB connection via the hardware registers and skips deep sleep entirely. This keeps the REPL fully accessible and lets you deploy code easily at any time.
-
-2. **Manual Reset Safeguard (Fallback):**
-   If the auto-detect does not trigger (e.g., if you are powering it through a passive power source but want to connect), press the physical **EN / RST** button on the ESP32-C3 board to reset it. Run your deployment command or open the REPL during the **5-second safeguard delay** before the board attempts to sleep:
-   ```bash
-   python3 scripts/deploy.py temp_humidity
-   ```
-
+1. **The Circuit:** Construct a **1:1 voltage divider** (using two **10kΩ** or **100kΩ** resistors). Connect the battery positive to one resistor, Ground (`GND`) to the other, and connect their junction to **GPIO 3** (`ADC1_CH3`) on the ESP32-C3.
+2. **Auto-Detection:** The firmware automatically checks the voltage on GPIO 3 during startup. If the voltage divider is not wired up (< 2.5V), it prints a clean message to the REPL, and **bypasses battery telemetry safely** without breaking the rest of the sensor readings.
