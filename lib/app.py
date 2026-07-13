@@ -1,0 +1,146 @@
+import machine
+import time
+import battery
+import wifi
+import homeassistant
+import usb
+import network
+
+def run(config):
+    # Print node header
+    print("\n========================================")
+    print(f"ESP32-C3 Node: {config.DEVICE_NAME}")
+    print("========================================\n")
+    
+    # 1. Reset Cause Check & Safeguard Delay
+    # skip safeguard wait if waking up from deep sleep
+    deepsleep_reset = getattr(machine, "DEEPSLEEP_RESET", 4)
+    if machine.reset_cause() != deepsleep_reset:
+        print("Cold boot or hard reset detected.")
+        print("Safeguard: Waiting 5 seconds before starting WiFi/Sensor connection...")
+        time.sleep(5)
+    else:
+        print("Woke up from Deep Sleep. Optimizing for fast execution...")
+
+    # Initialize sensors if configured
+    temp_sensor = None
+    if getattr(config, "TEMP_HUMIDITY_SENSOR", None):
+        from lib.drivers.temp_humidity import TempHumiditySensor
+        cfg = config.TEMP_HUMIDITY_SENSOR
+        temp_sensor = TempHumiditySensor(
+            sda_pin=cfg["sda"],
+            scl_pin=cfg["scl"],
+            sensor_type=cfg.get("type", "AHT20")
+        )
+
+    soil_sensor = None
+    if getattr(config, "SOIL_MOISTURE_SENSOR", None):
+        from lib.drivers.soil_moisture import SoilMoistureSensor
+        cfg = config.SOIL_MOISTURE_SENSOR
+        soil_sensor = SoilMoistureSensor(
+            adc_pin=cfg["adc_pin"],
+            power_pin=cfg.get("power_pin"),
+            dry_value=cfg.get("dry", 3800),
+            wet_value=cfg.get("wet", 1275),
+            num_samples=cfg.get("num_samples", 5)
+        )
+
+    # Main Loop
+    while True:
+        # --- 1. Read Sensors BEFORE WiFi ---
+        temp, humidity = None, None
+        if temp_sensor is not None:
+            print("Reading Temperature/Humidity Sensor...")
+            temp, humidity = temp_sensor.read()
+            if temp is not None:
+                print(f"🌡️  Measured: Temp={temp:.2f} °C, Humidity={humidity:.2f} %")
+
+        raw_moisture, moisture_pct = None, None
+        if soil_sensor is not None:
+            print("Reading Soil Moisture Sensor...")
+            raw_moisture, moisture_pct = soil_sensor.read()
+            if moisture_pct is not None:
+                print(f"🌱 Measured Soil Moisture: {moisture_pct:.1f}% (Raw ADC: {raw_moisture})")
+
+        # Measure battery voltage and percentage
+        bat_voltage = battery.read_voltage()
+        bat_percent = battery.get_percentage(bat_voltage)
+        if bat_voltage is not None:
+            print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
+        else:
+            print("🔋 Battery sensing circuit not detected. Skipping.")
+
+        # --- 2. WiFi Sync and Posting ---
+        has_data = (temp is not None) or (moisture_pct is not None) or (bat_voltage is not None)
+        if has_data:
+            print("Connecting to WiFi...")
+            if wifi.connect():
+                try:
+                    if temp is not None:
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="temp",
+                            state_value=f"{temp:.2f}",
+                            friendly_suffix="Temperature",
+                            unit_of_measurement="°C",
+                            device_class="temperature"
+                        )
+                    if humidity is not None:
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="humidity",
+                            state_value=f"{humidity:.2f}",
+                            friendly_suffix="Humidity",
+                            unit_of_measurement="%",
+                            device_class="humidity"
+                        )
+                    if moisture_pct is not None:
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="moisture",
+                            state_value=f"{moisture_pct:.1f}",
+                            friendly_suffix="Soil Moisture",
+                            unit_of_measurement="%",
+                            device_class="humidity"
+                        )
+                    if bat_voltage is not None and bat_percent is not None:
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="battery",
+                            state_value=f"{bat_percent:.1f}",
+                            friendly_suffix="Battery Percentage",
+                            unit_of_measurement="%",
+                            device_class="battery"
+                        )
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="battery_voltage",
+                            state_value=f"{bat_voltage:.2f}",
+                            friendly_suffix="Battery Voltage",
+                            unit_of_measurement="V",
+                            device_class="voltage"
+                        )
+                except Exception as e:
+                    print(f"⚠️ Failed to post to Home Assistant: {e}")
+                finally:
+                    # Cleanly shut down WiFi radio to conserve power
+                    try:
+                        wlan = network.WLAN(network.STA_IF)
+                        wlan.active(False)
+                        print("📶 WiFi interface shut down.")
+                    except Exception as e:
+                        print(f"⚠️ Failed to disable WiFi: {e}")
+            else:
+                print("❌ WiFi connection failed. Skipping HA post.")
+        else:
+            print("⚠️ Skipping WiFi connection and HA post due to lack of sensor readings.")
+
+        # --- 3. Sleep / Deep Sleep Cycle ---
+        sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
+        deep_sleep_enabled = getattr(config, "DEEP_SLEEP_ENABLED", False)
+
+        if deep_sleep_enabled and not usb.is_usb_connected():
+            print(f"💤 Entering Deep Sleep for {sleep_seconds} seconds...")
+            time.sleep_ms(100) # Let print buffers clear
+            machine.deepsleep(sleep_seconds * 1000)
+        else:
+            print(f"🔌 Staying awake. Sleeping {sleep_seconds} seconds before next reading...")
+            # Cooperative sleep using small steps so the board responds to interrupts
+            for _ in range(int(sleep_seconds * 10)):
+                time.sleep_ms(100)
+            print("\n🔄 Starting next measurement cycle...")

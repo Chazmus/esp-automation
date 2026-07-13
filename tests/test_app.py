@@ -1,0 +1,237 @@
+import pytest
+import sys
+from unittest.mock import MagicMock, patch
+
+# --- Setup MicroPython Mocks ---
+# Create global mocks that we can reset in each test
+machine_mock = MagicMock()
+time_mock = MagicMock()
+network_mock = MagicMock()
+wifi_mock = MagicMock()
+homeassistant_mock = MagicMock()
+battery_mock = MagicMock()
+usb_mock = MagicMock()
+ahtx0_mock = MagicMock()
+
+# Inject mock modules into sys.modules
+sys.modules['machine'] = machine_mock
+sys.modules['time'] = time_mock
+sys.modules['network'] = network_mock
+sys.modules['wifi'] = wifi_mock
+sys.modules['homeassistant'] = homeassistant_mock
+sys.modules['battery'] = battery_mock
+sys.modules['usb'] = usb_mock
+sys.modules['ahtx0'] = ahtx0_mock
+
+# Now we can import our app under test (it won't exist yet, but we define the tests)
+# We can't import `run` directly yet if the file doesn't exist, but we will write the tests.
+# Using standard import inside test functions so pytest doesn't crash on import during test discovery
+
+class TestApp:
+    def setup_method(self):
+        # Save original sys.modules keys to prevent test pollution
+        self.original_modules = {}
+        for key in ['machine', 'time', 'network', 'wifi', 'homeassistant', 'battery', 'usb', 'ahtx0']:
+            if key in sys.modules:
+                self.original_modules[key] = sys.modules[key]
+            else:
+                self.original_modules[key] = None
+
+        # Re-inject our specific mocks into sys.modules
+        sys.modules['machine'] = machine_mock
+        sys.modules['time'] = time_mock
+        sys.modules['network'] = network_mock
+        sys.modules['wifi'] = wifi_mock
+        sys.modules['homeassistant'] = homeassistant_mock
+        sys.modules['battery'] = battery_mock
+        sys.modules['usb'] = usb_mock
+        sys.modules['ahtx0'] = ahtx0_mock
+        
+        # Reload lib.app and drivers so they bind to these fresh mocks
+        import importlib
+        if 'lib.app' in sys.modules:
+            importlib.reload(sys.modules['lib.app'])
+        if 'lib.drivers.temp_humidity' in sys.modules:
+            importlib.reload(sys.modules['lib.drivers.temp_humidity'])
+        if 'lib.drivers.soil_moisture' in sys.modules:
+            importlib.reload(sys.modules['lib.drivers.soil_moisture'])
+
+        # Reset all mocks before each test
+        machine_mock.reset_mock()
+        time_mock.reset_mock()
+        network_mock.reset_mock()
+        wifi_mock.reset_mock()
+        homeassistant_mock.reset_mock()
+        battery_mock.reset_mock()
+        usb_mock.reset_mock()
+        ahtx0_mock.reset_mock()
+        
+        # Default mock returns
+        machine_mock.reset_cause.return_value = 0  # Cold boot by default
+        wifi_mock.connect.return_value = True
+        usb_mock.is_usb_connected.return_value = False
+        battery_mock.read_voltage.return_value = 3.8
+        battery_mock.get_percentage.return_value = 60.0
+
+    def teardown_method(self):
+        # Restore original sys.modules keys
+        for key, value in self.original_modules.items():
+            if value is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = value
+        
+        # Reload lib.app and drivers to bind back to the restored modules
+        import importlib
+        if 'lib.app' in sys.modules:
+            importlib.reload(sys.modules['lib.app'])
+        if 'lib.drivers.temp_humidity' in sys.modules:
+            importlib.reload(sys.modules['lib.drivers.temp_humidity'])
+        if 'lib.drivers.soil_moisture' in sys.modules:
+            importlib.reload(sys.modules['lib.drivers.soil_moisture'])
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
+    def test_run_temp_humidity_cold_boot(self, mock_sleep_ms, mock_sleep):
+        # Create mock configuration mimicking devices/temp_humidity/main.py
+        class MockConfig:
+            DEVICE_NAME = "test_temp_humidity"
+            DEEP_SLEEP_ENABLED = True
+            SLEEP_SECONDS = 900
+            TEMP_HUMIDITY_SENSOR = {
+                "sda": 5,
+                "scl": 6,
+                "type": "AHT20"
+            }
+            SOIL_MOISTURE_SENSOR = None
+
+        # Setup mock sensor
+        sensor_instance = MagicMock()
+        sensor_instance.temperature = 22.5
+        sensor_instance.relative_humidity = 45.0
+        ahtx0_mock.AHT20.return_value = sensor_instance
+
+        # Import run here so that test collection passes even if lib.app has syntax issues initially
+        from lib.app import run
+        
+        # We need to prevent infinite loop during test execution if SLEEP_SECONDS is processed
+        # For a deep sleep node, if it enters deep sleep, it raises or calls machine.deepsleep which we can intercept.
+        # We'll make machine.deepsleep raise a custom exception to break the loop!
+        class DeepSleepExit(BaseException):
+            pass
+        machine_mock.deepsleep.side_effect = DeepSleepExit()
+
+        with pytest.raises(DeepSleepExit):
+            run(MockConfig)
+
+        # Assert cold boot wait occurred (5 seconds)
+        time_mock.sleep.assert_any_call(5)
+
+        # Assert AHT20 sensor was initialized and read
+        ahtx0_mock.AHT20.assert_called_once()
+        assert sensor_instance.temperature == 22.5
+        
+        # Assert WiFi connection and HA posts
+        wifi_mock.connect.assert_called_once()
+        homeassistant_mock.post_device_sensor.assert_any_call(
+            sensor_suffix="temp",
+            state_value="22.50",
+            friendly_suffix="Temperature",
+            unit_of_measurement="°C",
+            device_class="temperature"
+        )
+        homeassistant_mock.post_device_sensor.assert_any_call(
+            sensor_suffix="humidity",
+            state_value="45.00",
+            friendly_suffix="Humidity",
+            unit_of_measurement="%",
+            device_class="humidity"
+        )
+        # Assert battery is posted
+        homeassistant_mock.post_device_sensor.assert_any_call(
+            sensor_suffix="battery",
+            state_value="60.0",
+            friendly_suffix="Battery Percentage",
+            unit_of_measurement="%",
+            device_class="battery"
+        )
+
+        # Assert WiFi interface was disabled
+        wlan_mock = network_mock.WLAN.return_value
+        wlan_mock.active.assert_called_with(False)
+
+        # Assert entered deepsleep
+        machine_mock.deepsleep.assert_called_once_with(900 * 1000)
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
+    def test_run_deepsleep_warm_boot_skips_safeguard(self, mock_sleep_ms, mock_sleep):
+        # Simulates waking up from deep sleep
+        class MockConfig:
+            DEVICE_NAME = "test_node"
+            DEEP_SLEEP_ENABLED = True
+            SLEEP_SECONDS = 900
+            TEMP_HUMIDITY_SENSOR = None
+            SOIL_MOISTURE_SENSOR = None
+
+        machine_mock.reset_cause.return_value = 4  # DEEPSLEEP_RESET is 4 (or machine.DEEPSLEEP_RESET)
+        machine_mock.DEEPSLEEP_RESET = 4
+        
+        class DeepSleepExit(BaseException):
+            pass
+        machine_mock.deepsleep.side_effect = DeepSleepExit()
+
+        from lib.app import run
+        with pytest.raises(DeepSleepExit):
+            run(MockConfig)
+
+        # Verify it skipped the 5 second safeguard sleep
+        for call in time_mock.sleep.call_args_list:
+            assert call[0][0] != 5
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
+    def test_run_always_on_loop(self, mock_sleep_ms, mock_sleep):
+        # Simulates a continuous loop device (like grow_wardrobe)
+        class MockConfig:
+            DEVICE_NAME = "test_always_on"
+            DEEP_SLEEP_ENABLED = False
+            SLEEP_SECONDS = 10
+            TEMP_HUMIDITY_SENSOR = None
+            SOIL_MOISTURE_SENSOR = {
+                "adc_pin": 0,
+                "dry": 3800,
+                "wet": 1275,
+                "power_pin": 1,
+                "num_samples": 1
+            }
+
+        # Mock ADC reading for soil moisture
+        adc_instance = MagicMock()
+        adc_instance.read.return_value = 2500  # Will yield ~51.5% moisture
+        machine_mock.ADC.return_value = adc_instance
+        machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
+
+        # We can patch time_mock.sleep_ms to raise an exception
+        # only after WiFi connection has been attempted to prevent early termination
+        class LoopComplete(BaseException):
+            pass
+        
+        def sleep_ms_side_effect(ms):
+            if wifi_mock.connect.called:
+                raise LoopComplete()
+        
+        time_mock.sleep_ms.side_effect = sleep_ms_side_effect
+
+        from lib.app import run
+        with pytest.raises(LoopComplete):
+            run(MockConfig)
+
+        # Verify HA post of soil moisture
+        homeassistant_mock.post_device_sensor.assert_any_call(
+            sensor_suffix="moisture",
+            state_value="51.5",
+            friendly_suffix="Soil Moisture",
+            unit_of_measurement="%",
+            device_class="humidity"
+        )
