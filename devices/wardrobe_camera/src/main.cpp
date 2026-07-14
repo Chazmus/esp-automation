@@ -137,6 +137,13 @@ void setup() {
     return;
   }
 
+  // Rotate camera 180 degrees (vertical_flip=0, horizontal_mirror=1)
+  sensor_t *s = esp_camera_sensor_get();
+  if (s) {
+    s->set_vflip(s, 0);
+    s->set_hmirror(s, 1);
+  }
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
