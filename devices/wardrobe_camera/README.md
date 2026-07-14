@@ -1,13 +1,13 @@
-# cam-test: ESP32-CAM Live Feed
+# wardrobe_camera: ESP32-CAM Live Feed
 
 An ESP32-CAM (AI-Thinker, OV2640) running [ESPHome](https://esphome.io/),
-exposing a `camera.cam_test_cam_test_live_feed` entity to Home Assistant
+exposing a `camera.wardrobe_camera_wardrobe_live_feed` entity to Home Assistant
 and driving a snapshot-based timelapse.
 
 This device is **not** part of the MicroPython fleet used by the rest of
 `devices/`. Mainline MicroPython has no reliable OV2640 camera driver, so
 this uses ESPHome (Arduino framework under the hood) instead. Everything
-lives self-contained inside `devices/cam-test/`.
+lives self-contained inside `devices/wardrobe_camera/`.
 
 The directory also still contains `src/main.cpp` / `platformio.ini`: a raw
 PlatformIO/Arduino sketch that serves a bare MJPEG stream with no Home
@@ -45,7 +45,7 @@ outside of Home Assistant (see "Appendix: Raw MJPEG Test" below).
    generated API encryption key and OTA password:
 
    ```bash
-   cp devices/cam-test/esphome/secrets.yaml.example devices/cam-test/esphome/secrets.yaml
+   cp devices/wardrobe_camera/esphome/secrets.yaml.example devices/wardrobe_camera/esphome/secrets.yaml
    python3 -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
    ```
 
@@ -60,8 +60,8 @@ outside of Home Assistant (see "Appendix: Raw MJPEG Test" below).
 **First flash (USB, board in flash mode):**
 
 ```bash
-cd devices/cam-test/esphome
-esphome upload cam-test.yaml --device /dev/ttyUSB0
+cd devices/wardrobe_camera/esphome
+esphome upload wardrobe_camera.yaml --device /dev/ttyUSB0
 ```
 
 Put the board into flash mode first (jumper GPIO 0 to GND on a bare FTDI
@@ -72,11 +72,11 @@ mode and press reset (or power-cycle it) to boot normally.
 **Later updates (OTA, once the device is on the network):**
 
 ```bash
-cd devices/cam-test/esphome
-esphome upload cam-test.yaml
+cd devices/wardrobe_camera/esphome
+esphome upload wardrobe_camera.yaml
 ```
 
-ESPHome will find `cam-test.local` automatically and push the update over
+ESPHome will find `wardrobe-camera.local` automatically and push the update over
 WiFi — no USB cable needed after the first flash.
 
 ### View Serial Output (first boot only)
@@ -114,16 +114,16 @@ You should see it join WiFi and print its IP address, e.g. `IP Address:
 ## 4. Add to Home Assistant
 
 1. **Settings → Devices & Services** — Home Assistant should auto-discover
-   `cam-test` on the network. If not, add the **ESPHome** integration
-   manually and point it at `cam-test.local` (or its IP).
+   `wardrobe-camera` on the network. If not, add the **ESPHome** integration
+   manually and point it at `wardrobe-camera.local` (or its IP).
 2. When prompted, enter the `api_encryption_key` value from
    `esphome/secrets.yaml`.
 3. The device exposes a camera entity (in this setup:
-   `camera.cam_test_cam_test_live_feed`) — add it to a dashboard view to
+   `camera.wardrobe_camera_wardrobe_live_feed`) — add it to a dashboard view to
    see the live feed.
 
 Consider reserving the board's IP (MAC address is logged on boot) in your
-router's DHCP settings so `cam-test.local` doesn't need to keep re-resolving
+router's DHCP settings so `wardrobe-camera.local` doesn't need to keep re-resolving
 if mDNS is flaky on your network.
 
 ---
@@ -135,12 +135,12 @@ snapshot-automation approach from
 [docs/camera_timelapse_plan.md](../../docs/camera_timelapse_plan.md):
 
 * **[ha_timelapse_automation.yaml](ha_timelapse_automation.yaml)** — takes
-  a snapshot from `camera.cam_test_cam_test_live_feed` every 30 minutes
+  a snapshot from `camera.wardrobe_camera_wardrobe_live_feed` every 30 minutes
   (7 AM–9 PM) and saves it under
-  `/config/www/timelapse/cam_test/`.
+  `/config/www/timelapse/wardrobe_camera/`.
 * **[ha_timelapse_shell_command.yaml](ha_timelapse_shell_command.yaml)** —
   a `shell_command` that compiles the saved frames into
-  `/config/www/timelapse/cam_test/cam_test_timelapse.mp4` via `ffmpeg`.
+  `/config/www/timelapse/wardrobe_camera/wardrobe_camera_timelapse.mp4` via `ffmpeg`.
 
 **Before using either:** add `/config/www/timelapse` to
 `allowlist_external_dirs` in Home Assistant's `configuration.yaml` (see
@@ -150,17 +150,17 @@ snapshot service will silently refuse to write files.
 Paste the automation into **Settings → Automations → Edit in YAML**, and
 merge the `shell_command:` block into `configuration.yaml`. Trigger the
 compile step manually via **Developer Tools → Actions →
-`shell_command.compile_cam_test_timelapse`** whenever you want a fresh
+`shell_command.compile_wardrobe_camera_timelapse`** whenever you want a fresh
 video.
 
 ---
 
 ## 6. Notes
 
-* Frame size/quality is set in `esphome/cam-test.yaml` (currently
+* Frame size/quality is set in `esphome/wardrobe_camera.yaml` (currently
   800x600/SVGA, JPEG quality 10). The board has 8MB of PSRAM, confirmed
   in the boot log, so higher resolutions are available if needed.
-* `esphome/cam-test.yaml` disables the `reset_pin` entry entirely —
+* `esphome/wardrobe_camera.yaml` disables the `reset_pin` entry entirely —
   AI-Thinker boards tie camera reset to the system reset line, and ESPHome
   rejects `-1` as an explicit pin number (unlike the raw Arduino sketch,
   which uses `RESET_GPIO_NUM -1` directly against the esp32-camera C API).
@@ -175,9 +175,9 @@ integration existed. It serves a live MJPEG stream directly (no HA, no
 snapshots) at `http://<device-ip>/`.
 
 ```bash
-cp devices/cam-test/include/secrets.h.example devices/cam-test/include/secrets.h
+cp devices/wardrobe_camera/include/secrets.h.example devices/wardrobe_camera/include/secrets.h
 # fill in WIFI_SSID / WIFI_PASSWORD in secrets.h, then:
-cd devices/cam-test
+cd devices/wardrobe_camera
 pio run --target upload
 ```
 

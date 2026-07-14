@@ -1,0 +1,10 @@
+# Home Assistant shell command: compiles the saved wardrobe camera snapshots into an mp4.
+# Add this to configuration.yaml (merge into any existing `shell_command:` block),
+# then restart Home Assistant and trigger it manually via
+# Developer Tools > Actions > Shell Command: compile_wardrobe_camera_timelapse.
+
+shell_command:
+  compile_wardrobe_camera_timelapse: >-
+    ffmpeg -y -framerate 24 -pattern_type glob -i '/config/www/timelapse/wardrobe_camera/*.jpg'
+    -c:v libx264 -pix_fmt yuv420p -vf "scale=800:-2"
+    /config/www/timelapse/wardrobe_camera/wardrobe_camera_timelapse.mp4

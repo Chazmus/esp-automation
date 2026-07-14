@@ -1,9 +1,9 @@
-# Home Assistant automation: periodic timelapse snapshots for the cam-test camera.
+# Home Assistant automation: periodic timelapse snapshots for the wardrobe camera.
 # Copy this into Settings > Automations > Edit in YAML (or paste into automations.yaml),
 # after completing the setup steps in docs/camera_timelapse_plan.md (allowlist_external_dirs, etc).
 
-alias: "Cam Test Timelapse Snapshot"
-description: "Takes a snapshot of the cam-test camera feed every 30 minutes to record a timelapse."
+alias: "Wardrobe Camera Timelapse Snapshot"
+description: "Takes a snapshot of the wardrobe camera feed every 30 minutes to record a timelapse."
 trigger:
   - platform: time_pattern
     minutes: "/30"
@@ -15,8 +15,8 @@ condition:
 action:
   - service: camera.snapshot
     target:
-      entity_id: camera.cam_test_cam_test_live_feed
+      entity_id: camera.wardrobe_camera_wardrobe_live_feed
     data:
       # Saves the files sequentially using timestamp filenames
-      filename: "/config/www/timelapse/cam_test/frame_{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg"
+      filename: "/config/www/timelapse/wardrobe_camera/frame_{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg"
 mode: single

@@ -44,8 +44,8 @@ Instead of maintaining duplicated loops and helper logic on each device, all exe
 │   │   ├── main.py             # Bootstrapper (delegates execution to lib.app)
 │   │   └── README.md           # Documentation specific to grow wardrobe
 │   │
-│   └── cam-test/                # Device #3: ESP32-CAM live feed + Home Assistant integration (ESPHome, not MicroPython)
-│       ├── esphome/cam-test.yaml         # ESPHome config: camera, WiFi, HA API
+│   └── wardrobe_camera/         # Device #3: ESP32-CAM live feed + Home Assistant integration (ESPHome, not MicroPython)
+│       ├── esphome/wardrobe_camera.yaml  # ESPHome config: camera, WiFi, HA API
 │       ├── esphome/secrets.yaml.example  # WiFi/API key/OTA credentials template
 │       ├── ha_timelapse_automation.yaml    # HA automation: periodic snapshots
 │       ├── ha_timelapse_shell_command.yaml # HA shell_command: compile snapshots to mp4

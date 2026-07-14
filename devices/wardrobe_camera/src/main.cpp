@@ -21,7 +21,7 @@ static httpd_handle_t streamServer = NULL;
 
 static esp_err_t indexHandler(httpd_req_t *req) {
   static const char INDEX_HTML[] =
-      "<!DOCTYPE html><html><head><title>cam-test</title></head>"
+      "<!DOCTYPE html><html><head><title>wardrobe-camera</title></head>"
       "<body style=\"margin:0;background:#000\">"
       "<img src=\"/stream\" style=\"width:100%;height:auto;display:block\">"
       "</body></html>";
