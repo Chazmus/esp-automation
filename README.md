@@ -37,12 +37,23 @@ Instead of maintaining duplicated loops and helper logic on each device, all exe
 │   │   ├── config.py           # Configuration parameters (pinouts, intervals)
 │   │   └── main.py             # Bootstrapper (delegates execution to lib.app)
 │   │
-│   └── grow_wardrobe/          # Device #2: Multi-sensor & Multi-actuator Controller
-│       ├── boot.py             # Startup configuration (starts WebREPL server)
-│       ├── config.py           # Configuration parameters (sensors, fan, relay pins)
-│       ├── ha_card.yaml        # Home Assistant dashboard card configuration template
-│       ├── main.py             # Bootstrapper (delegates execution to lib.app)
-│       └── README.md           # Documentation specific to grow wardrobe
+│   ├── grow_wardrobe/          # Device #2: Multi-sensor & Multi-actuator Controller
+│   │   ├── boot.py             # Startup configuration (starts WebREPL server)
+│   │   ├── config.py           # Configuration parameters (sensors, fan, relay pins)
+│   │   ├── ha_card.yaml        # Home Assistant dashboard card configuration template
+│   │   ├── main.py             # Bootstrapper (delegates execution to lib.app)
+│   │   └── README.md           # Documentation specific to grow wardrobe
+│   │
+│   └── cam-test/                # Device #3: ESP32-CAM live feed + Home Assistant integration (ESPHome, not MicroPython)
+│       ├── esphome/cam-test.yaml         # ESPHome config: camera, WiFi, HA API
+│       ├── esphome/secrets.yaml.example  # WiFi/API key/OTA credentials template
+│       ├── ha_timelapse_automation.yaml    # HA automation: periodic snapshots
+│       ├── ha_timelapse_shell_command.yaml # HA shell_command: compile snapshots to mp4
+│       ├── platformio.ini       # Raw Arduino MJPEG test (pre-ESPHome fallback), pinned to Arduino-ESP32 2.x core
+│       ├── src/main.cpp         # Raw Arduino MJPEG test: WiFi + OV2640 stream server, no HA integration
+│       ├── include/camera_pins.h    # AI-Thinker pin mapping (used by the raw test)
+│       ├── include/secrets.h.example # WiFi credentials template (used by the raw test)
+│       └── README.md            # Wiring, flashing, HA setup & timelapse instructions
 │
 ├── scripts/                    # Host workflow automation utilities
 │   ├── deploy.py               # Selective deployer (copies shared core & configures board)

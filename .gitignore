@@ -27,6 +27,14 @@ share/python-wheels/
 
 # Ignore local secrets
 lib/secrets.py
+devices/cam-test/include/secrets.h
+devices/cam-test/esphome/secrets.yaml
+
+# PlatformIO build artifacts
+.pio/
+
+# ESPHome build artifacts
+devices/cam-test/esphome/.esphome/
 *.egg-info/
 .installed.cfg
 *.egg

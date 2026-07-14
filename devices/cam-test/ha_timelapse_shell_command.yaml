@@ -1,0 +1,10 @@
+# Home Assistant shell command: compiles the saved cam-test snapshots into an mp4.
+# Add this to configuration.yaml (merge into any existing `shell_command:` block),
+# then restart Home Assistant and trigger it manually via
+# Developer Tools > Actions > Shell Command: compile_cam_test_timelapse.
+
+shell_command:
+  compile_cam_test_timelapse: >-
+    ffmpeg -y -framerate 24 -pattern_type glob -i '/config/www/timelapse/cam_test/*.jpg'
+    -c:v libx264 -pix_fmt yuv420p -vf "scale=800:-2"
+    /config/www/timelapse/cam_test/cam_test_timelapse.mp4
