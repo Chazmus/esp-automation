@@ -106,15 +106,15 @@ touchscreen:
 sensor:
   - platform: homeassistant
     id: ha_temp
-    entity_id: sensor.esp32_growdrobe_temp
+    entity_id: sensor.growdrobe_temp_persistent
     
   - platform: homeassistant
     id: ha_humidity
-    entity_id: sensor.esp32_growdrobe_humidity
+    entity_id: sensor.growdrobe_humidity_persistent
 
   - platform: homeassistant
     id: ha_moisture
-    entity_id: sensor.esp32_growdrobe_moisture
+    entity_id: sensor.growdrobe_moisture_persistent
 
 # 5. Pull Switch States from Home Assistant
 binary_sensor:
