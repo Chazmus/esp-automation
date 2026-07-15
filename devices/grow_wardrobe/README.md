@@ -147,3 +147,12 @@ To prevent water damage, pump burn-outs, or crop loss, the following failsafes a
 2.  **Dry-Run Pump Protection**: Submersible and diaphragm pumps can burn out if run dry for extended periods. The firmware enforces maximum run times (e.g., irrigation pump cannot run for >45 seconds continuously; runoff pump cannot run for >3 minutes continuously).
 3.  **Runoff Waste Bucket Level Switch (Crucial Addition)**: If the waste bucket fills up, runoff water will overflow onto the floor. Installing a simple **float switch** in the lid of the 10L waste bucket wired to an ESP32 GPIO allows the controller to immediately disable irrigation and sound an alarm if the bucket is full.
 4.  **Hardware Watchdog Timer (WDT)**: ESP32-C3 firmware may lock up due to WiFi drops or electrical noise. Enabling a hardware watchdog timer in MicroPython (`machine.WDT`) ensures that if the system hangs, it will automatically reboot within 10-15 seconds rather than leaving a pump stuck in the "ON" state.
+
+---
+
+## 🖥️ Companion Devices & Dashboards
+
+The Grow Wardrobe system integrates with several companion modules to provide complete local display control and video monitoring:
+
+1. **[Wardrobe Touchscreen Control Panel](file:///home/chaz_bailey/workspace/esp-automation/devices/wardrobe_touchscreen/README.md)**: A dedicated 2.8" color touchscreen dashboard powered by an ESP32-C3 Super Mini running ESPHome. It connects directly to Home Assistant to display ambient temp/humidity and soil moisture, and provides interactive toggle buttons to control the wardrobe lights and ventilation fans.
+2. **[Wardrobe Camera Node](file:///home/chaz_bailey/workspace/esp-automation/devices/wardrobe_camera/README.md)**: An ESP32-CAM module mounted inside the wardrobe. It streams live JPEG video and captures high-resolution pictures for time-lapse generation of plant growth.
