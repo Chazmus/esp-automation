@@ -11,6 +11,8 @@ esp32:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  power_save_mode: NONE
+  output_power: 12dB
 
 # We don't need the Home Assistant Native API for this standalone test.
 # api:
