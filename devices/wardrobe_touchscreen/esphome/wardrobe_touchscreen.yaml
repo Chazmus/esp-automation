@@ -106,21 +106,21 @@ touchscreen:
 sensor:
   - platform: homeassistant
     id: ha_temp
-    entity_id: sensor.esp32_grow_wardrobe_temp
+    entity_id: sensor.esp32_growdrobe_temp
     
   - platform: homeassistant
     id: ha_humidity
-    entity_id: sensor.esp32_grow_wardrobe_humidity
+    entity_id: sensor.esp32_growdrobe_humidity
 
   - platform: homeassistant
     id: ha_moisture
-    entity_id: sensor.esp32_grow_wardrobe_moisture
+    entity_id: sensor.esp32_growdrobe_moisture
 
 # 5. Pull Switch States from Home Assistant
 binary_sensor:
   - platform: homeassistant
     id: ha_light_switch
-    entity_id: switch.grow_wardrobe_light
+    entity_id: light.wardrobe_lightstrip
 
 # 6. Action handlers sending commands back to Home Assistant
 script:
@@ -136,9 +136,9 @@ script:
     mode: restart
     then:
       - homeassistant.service:
-          service: homeassistant.toggle
+          service: light.toggle
           data:
-            entity_id: switch.grow_wardrobe_light
+            entity_id: light.wardrobe_lightstrip
 
 # Fonts and Colors for rendering
 font:
