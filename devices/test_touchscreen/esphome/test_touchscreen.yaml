@@ -1,0 +1,157 @@
+esphome:
+  name: test-touchscreen
+  friendly_name: Test Touchscreen Dashboard
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# We don't need the Home Assistant Native API for this standalone test.
+# api:
+
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+logger:
+
+# 1. Share SPI Bus between Display and Touch Controllers
+spi:
+  clk_pin: GPIO4
+  mosi_pin: GPIO6
+  miso_pin: GPIO5
+
+# Global variables to store touch coordinate state for rendering
+globals:
+  - id: touch_x
+    type: int
+    initial_value: '-1'
+  - id: touch_y
+    type: int
+    initial_value: '-1'
+  - id: touch_active
+    type: bool
+    initial_value: 'false'
+
+display:
+  - platform: ili9xxx
+    model: ili9341
+    id: test_tft
+    cs_pin: GPIO7
+    dc_pin: GPIO10
+    reset_pin: GPIO1
+    invert_colors: false
+    data_rate: 10MHz
+    color_palette: 8BIT
+    rotation: 90
+    update_interval: 50ms
+    lambda: |-
+      // Fill background with a sleek dark slate color
+      it.fill(id(color_bg));
+
+      // Draw title block
+      it.print(10, 10, id(font_large), id(color_title), "TFT & Touchscreen Test");
+      it.line(10, 35, 310, 35, id(color_accent));
+
+      // Display Status Info
+      it.print(20, 55, id(font_medium), id(color_white), "Display Controller: ILI9341");
+      it.print(20, 80, id(font_medium), id(color_white), "Touch Controller: XPT2046");
+      
+      // Draw a test color palette (color bar test)
+      it.filled_rectangle(20, 120, 40, 30, id(color_red));
+      it.filled_rectangle(65, 120, 40, 30, id(color_green));
+      it.filled_rectangle(110, 120, 40, 30, id(color_blue));
+      it.filled_rectangle(155, 120, 40, 30, id(color_yellow));
+      it.filled_rectangle(200, 120, 40, 30, id(color_accent));
+
+      // Show real-time touch feedback on the screen
+      if (id(touch_active)) {
+        it.print(20, 175, id(font_medium), id(color_green), "Touch: ACTIVE");
+        it.printf(20, 200, id(font_medium), id(color_white), "Coordinates: X=%d, Y=%d", id(touch_x), id(touch_y));
+        
+        // Draw a small crosshair / circle indicator where the touch is
+        it.circle(id(touch_x), id(touch_y), 10, id(color_yellow));
+        it.line(id(touch_x) - 15, id(touch_y), id(touch_x) + 15, id(touch_y), id(color_yellow));
+        it.line(id(touch_x), id(touch_y) - 15, id(touch_x), id(touch_y) + 15, id(color_yellow));
+      } else {
+        it.print(20, 175, id(font_medium), id(color_red), "Touch: INACTIVE (Tap screen)");
+      }
+
+# 3. Configure Touch Driver (XPT2046)
+touchscreen:
+  - platform: xpt2046
+    id: test_touch
+    cs_pin: GPIO0
+    interrupt_pin: GPIO3
+    update_interval: 50ms
+    threshold: 400
+    transform:
+      swap_xy: true
+      mirror_x: true
+      mirror_y: true
+    calibration:
+      x_min: 300
+      x_max: 3800
+      y_min: 250
+      y_max: 3900
+    # Map coordinates and update globals to redraw the screen with feedback
+    on_touch:
+      - lambda: |-
+          id(touch_x) = touch.x;
+          id(touch_y) = touch.y;
+          id(touch_active) = true;
+          ESP_LOGI("touch", "Touch down: x=%d, y=%d (raw: x=%d, y=%d)", 
+                   touch.x, touch.y, touch.x_raw, touch.y_raw);
+    on_release:
+      - lambda: |-
+          id(touch_active) = false;
+          ESP_LOGI("touch", "Touch released");
+
+# Fonts and Colors for rendering
+font:
+  - file: "gfonts://Roboto"
+    id: font_large
+    size: 20
+  - file: "gfonts://Roboto"
+    id: font_medium
+    size: 14
+
+color:
+  - id: color_bg
+    red: 10%
+    green: 11%
+    blue: 13%
+  - id: color_title
+    red: 90%
+    green: 92%
+    blue: 95%
+  - id: color_accent
+    red: 0%
+    green: 50%
+    blue: 100%
+  - id: color_white
+    red: 80%
+    green: 80%
+    blue: 80%
+  - id: color_red
+    red: 85%
+    green: 20%
+    blue: 20%
+  - id: color_green
+    red: 20%
+    green: 75%
+    blue: 20%
+  - id: color_blue
+    red: 20%
+    green: 50%
+    blue: 85%
+  - id: color_yellow
+    red: 90%
+    green: 80%
+    blue: 10%

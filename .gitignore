@@ -29,12 +29,16 @@ share/python-wheels/
 lib/secrets.py
 devices/wardrobe_camera/include/secrets.h
 devices/wardrobe_camera/esphome/secrets.yaml
+devices/wardrobe_touchscreen/esphome/secrets.yaml
+devices/test_touchscreen/esphome/secrets.yaml
 
 # PlatformIO build artifacts
 .pio/
 
 # ESPHome build artifacts
 devices/wardrobe_camera/esphome/.esphome/
+devices/wardrobe_touchscreen/esphome/.esphome/
+devices/test_touchscreen/esphome/.esphome/
 *.egg-info/
 .installed.cfg
 *.egg
