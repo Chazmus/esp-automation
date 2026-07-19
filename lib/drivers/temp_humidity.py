@@ -17,8 +17,8 @@ class TempHumiditySensor:
         """
         if self.sensor is None:
             try:
-                # Use I2C channel 0
-                self.i2c = machine.I2C(0, sda=machine.Pin(self.sda_pin), scl=machine.Pin(self.scl_pin), freq=100000)
+                # Use SoftI2C to support multiple independent software buses on arbitrary pins
+                self.i2c = machine.SoftI2C(sda=machine.Pin(self.sda_pin), scl=machine.Pin(self.scl_pin), freq=100000)
                 # Wait for sensor to stabilize
                 time.sleep_ms(50)
                 

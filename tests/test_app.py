@@ -165,6 +165,57 @@ class TestApp:
 
     @patch('time.sleep')
     @patch('time.sleep_ms')
+    def test_run_multi_temp_humidity_cold_boot(self, mock_sleep_ms, mock_sleep):
+        # Create mock configuration mimicking multiple sensor zones
+        class MockConfig:
+            DEVICE_NAME = "test_multi_temp_humidity"
+            DEEP_SLEEP_ENABLED = True
+            SLEEP_SECONDS = 900
+            TEMP_HUMIDITY_SENSORS = {
+                "canopy": {"sda": 5, "scl": 6, "type": "AHT20"},
+                "pot": {"sda": 7, "scl": 8, "type": "AHT20"},
+                "ambient": {"sda": 9, "scl": 10, "type": "AHT20"}
+            }
+            SOIL_MOISTURE_SENSOR = None
+
+        # Setup mock sensor
+        sensor_instance = MagicMock()
+        sensor_instance.temperature = 22.5
+        sensor_instance.relative_humidity = 45.0
+        ahtx0_mock.AHT20.return_value = sensor_instance
+
+        from lib.app import run
+        
+        class DeepSleepExit(BaseException):
+            pass
+        machine_mock.deepsleep.side_effect = DeepSleepExit()
+
+        with pytest.raises(DeepSleepExit):
+            run(MockConfig)
+
+        # Assert three sensors were initialized
+        assert ahtx0_mock.AHT20.call_count == 3
+        
+        # Assert WiFi connection and HA posts for each zone
+        wifi_mock.connect.assert_called_once()
+        for zone in ["canopy", "pot", "ambient"]:
+            homeassistant_mock.post_device_sensor.assert_any_call(
+                sensor_suffix=f"{zone}_temp",
+                state_value="22.50",
+                friendly_suffix=f"{zone.capitalize()} Temperature",
+                unit_of_measurement="°C",
+                device_class="temperature"
+            )
+            homeassistant_mock.post_device_sensor.assert_any_call(
+                sensor_suffix=f"{zone}_humidity",
+                state_value="45.00",
+                friendly_suffix=f"{zone.capitalize()} Humidity",
+                unit_of_measurement="%",
+                device_class="humidity"
+            )
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
     def test_run_deepsleep_warm_boot_skips_safeguard(self, mock_sleep_ms, mock_sleep):
         # Simulates waking up from deep sleep
         class MockConfig:

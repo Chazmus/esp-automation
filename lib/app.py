@@ -23,11 +23,19 @@ def run(config):
         print("Woke up from Deep Sleep. Optimizing for fast execution...")
 
     # Initialize sensors if configured
-    temp_sensor = None
-    if getattr(config, "TEMP_HUMIDITY_SENSOR", None):
+    temp_sensors = {}
+    if getattr(config, "TEMP_HUMIDITY_SENSORS", None):
+        from lib.drivers.temp_humidity import TempHumiditySensor
+        for zone, cfg in config.TEMP_HUMIDITY_SENSORS.items():
+            temp_sensors[zone] = TempHumiditySensor(
+                sda_pin=cfg["sda"],
+                scl_pin=cfg["scl"],
+                sensor_type=cfg.get("type", "AHT20")
+            )
+    elif getattr(config, "TEMP_HUMIDITY_SENSOR", None):
         from lib.drivers.temp_humidity import TempHumiditySensor
         cfg = config.TEMP_HUMIDITY_SENSOR
-        temp_sensor = TempHumiditySensor(
+        temp_sensors["default"] = TempHumiditySensor(
             sda_pin=cfg["sda"],
             scl_pin=cfg["scl"],
             sensor_type=cfg.get("type", "AHT20")
@@ -64,12 +72,21 @@ def run(config):
         deep_sleep_enabled = getattr(config, "DEEP_SLEEP_ENABLED", False)
         
         # --- 1. Read Sensors BEFORE WiFi ---
-        temp, humidity = None, None
-        if temp_sensor is not None:
-            print("Reading Temperature/Humidity Sensor...")
-            temp, humidity = temp_sensor.read()
-            if temp is not None:
-                print(f"🌡️  Measured: Temp={temp:.2f} °C, Humidity={humidity:.2f} %")
+        readings = {}
+        for zone, sensor in temp_sensors.items():
+            print(f"Reading Temperature/Humidity Sensor ({zone})...")
+            t, h = sensor.read()
+            if t is not None:
+                print(f"🌡️  {zone.capitalize()} Measured: Temp={t:.2f} °C, Humidity={h:.2f} %")
+                readings[zone] = (t, h)
+
+        primary_temp = None
+        if "canopy" in readings:
+            primary_temp = readings["canopy"][0]
+        elif "default" in readings:
+            primary_temp = readings["default"][0]
+        elif readings:
+            primary_temp = list(readings.values())[0][0]
 
         raw_moisture, moisture_pct = None, None
         if soil_sensor is not None:
@@ -87,9 +104,9 @@ def run(config):
             print("🔋 Battery sensing circuit not detected. Skipping.")
 
         # --- 2. Actuator Control ---
-        if fan is not None and temp is not None:
+        if fan is not None and primary_temp is not None:
             cfg = config.PWM_FAN
-            if temp > cfg.get("target_temp", 28.0):
+            if primary_temp > cfg.get("target_temp", 28.0):
                 fan.set_speed(100)
                 print("💨 Fan speed set to 100% (temperature high)")
             else:
@@ -102,27 +119,34 @@ def run(config):
             print("💡 Light Relay state: ON")
 
         # --- 3. WiFi Sync and Posting ---
-        has_data = (temp is not None) or (moisture_pct is not None) or (bat_voltage is not None)
+        has_temp_readings = any(t is not None for t, h in readings.values())
+        has_data = has_temp_readings or (moisture_pct is not None) or (bat_voltage is not None)
         if has_data:
             print("Connecting to WiFi...")
             if wifi.connect():
                 try:
-                    if temp is not None:
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="temp",
-                            state_value=f"{temp:.2f}",
-                            friendly_suffix="Temperature",
-                            unit_of_measurement="°C",
-                            device_class="temperature"
-                        )
-                    if humidity is not None:
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="humidity",
-                            state_value=f"{humidity:.2f}",
-                            friendly_suffix="Humidity",
-                            unit_of_measurement="%",
-                            device_class="humidity"
-                        )
+                    for zone, values in readings.items():
+                        t, h = values
+                        if t is not None:
+                            suffix = f"{zone}_temp" if zone != "default" else "temp"
+                            friendly = f"{zone.capitalize()} Temperature" if zone != "default" else "Temperature"
+                            homeassistant.post_device_sensor(
+                                sensor_suffix=suffix,
+                                state_value=f"{t:.2f}",
+                                friendly_suffix=friendly,
+                                unit_of_measurement="°C",
+                                device_class="temperature"
+                            )
+                        if h is not None:
+                            suffix = f"{zone}_humidity" if zone != "default" else "humidity"
+                            friendly = f"{zone.capitalize()} Humidity" if zone != "default" else "Humidity"
+                            homeassistant.post_device_sensor(
+                                sensor_suffix=suffix,
+                                state_value=f"{h:.2f}",
+                                friendly_suffix=friendly,
+                                unit_of_measurement="%",
+                                device_class="humidity"
+                            )
                     if moisture_pct is not None:
                         homeassistant.post_device_sensor(
                             sensor_suffix="moisture",

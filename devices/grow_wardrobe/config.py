@@ -8,10 +8,22 @@ DEEP_SLEEP_ENABLED = False
 SLEEP_SECONDS = 10  # Cycle interval
 
 # Sensor configuration
-TEMP_HUMIDITY_SENSOR = {
-    "sda": 5,
-    "scl": 6,
-    "type": "AHT10"
+TEMP_HUMIDITY_SENSORS = {
+    "canopy": {
+        "sda": 5,
+        "scl": 6,
+        "type": "AHT20"
+    },
+    "pot": {
+        "sda": 7,
+        "scl": 8,
+        "type": "AHT20"
+    },
+    "ambient": {
+        "sda": 9,
+        "scl": 10,
+        "type": "AHT20"
+    }
 }
 
 SOIL_MOISTURE_SENSOR = {
