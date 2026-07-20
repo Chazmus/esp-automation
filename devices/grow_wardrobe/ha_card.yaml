@@ -1,72 +1,111 @@
 # Home Assistant Picture Elements Card Configuration
 # Place this YAML inside a 'Manual' Lovelace card in your dashboard.
-# Make sure to upload growdrobe.jpg to /config/www/growdrobe.jpg first.
+#
+# IMPORTANT:
+# First, copy the background image (~/Downloads/growdrobe-dashboard.png) to your
+# Home Assistant config's 'www' folder so it is served locally at:
+# /local/growdrobe-dashboard.png
+#
+# You can copy it via SCP, Samba, or through the Home Assistant File Editor.
+# E.g., command:
+# scp ~/Downloads/growdrobe-dashboard.png <ha-username>@192.168.86.238:/config/www/
 
 type: picture-elements
-image: /local/growdrobe.jpg
+image: /local/growdrobe-dashboard.png
 elements:
-  # 1. Temperature Sensor 1 (Growdrobe Ambient)
+  # 1. Canopy Sensor (Top Thermometer)
   - type: state-label
-    entity: sensor.esp32_growdrobe_temp
-    prefix: 'Temp: '
-    style:
-      top: 25%
-      left: 30%
-      color: white
-      font-size: 14px
-      font-weight: bold
-      background-color: 'rgba(0, 0, 0, 0.6)'
-      padding: 6px
-      border-radius: 4px
-
-  # 2. Relative Humidity Sensor
-  - type: state-label
-    entity: sensor.esp32_growdrobe_humidity
-    prefix: 'Humidity: '
-    style:
-      top: 35%
-      left: 30%
-      color: white
-      font-size: 14px
-      font-weight: bold
-      background-color: 'rgba(0, 0, 0, 0.6)'
-      padding: 6px
-      border-radius: 4px
-
-  # 3. Soil Moisture (%)
-  - type: state-label
-    entity: sensor.esp32_growdrobe_moisture
-    prefix: 'Soil Moisture: '
-    style:
-      top: 75%
-      left: 50%
-      color: white
-      font-size: 14px
-      font-weight: bold
-      background-color: 'rgba(0, 100, 250, 0.7)'
-      padding: 6px
-      border-radius: 4px
-
-  # 4. Fan Speed Status (Future Integration)
-  - type: state-label
-    entity: sensor.esp32_growdrobe_fan_speed
-    prefix: 'Fan Speed: '
+    entity: sensor.esp32_growdrobe_canopy_temp
     style:
       top: 15%
-      left: 70%
-      color: white
-      font-size: 14px
+      left: 23%
+      color: '#ffffff'
+      font-size: 16px
       font-weight: bold
-      background-color: 'rgba(0, 0, 0, 0.6)'
-      padding: 6px
-      border-radius: 4px
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_canopy_humidity
+    style:
+      top: 24%
+      left: 23%
+      color: '#a0a0a0'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
 
-  # 5. Interactive Light Switch (Future Integration)
+  # 2. Pot Sensor (Middle Thermometer)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_pot_temp
+    style:
+      top: 45%
+      left: 23%
+      color: '#ffffff'
+      font-size: 16px
+      font-weight: bold
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_pot_humidity
+    style:
+      top: 54%
+      left: 23%
+      color: '#a0a0a0'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
+
+  # 3. Ambient Sensor (Bottom Thermometer)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_ambient_temp
+    style:
+      top: 75%
+      left: 23%
+      color: '#ffffff'
+      font-size: 16px
+      font-weight: bold
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_ambient_humidity
+    style:
+      top: 84%
+      left: 23%
+      color: '#a0a0a0'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
+
+  # 4. Soil Moisture (Positioned over the soil/pot area)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_moisture
+    prefix: 'Moisture: '
+    style:
+      top: 78%
+      left: 62%
+      color: '#ffffff'
+      font-size: 15px
+      font-weight: bold
+      background-color: 'rgba(34, 139, 34, 0.65)'
+      padding: 4px 8px
+      border-radius: 4px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
+
+  # 5. Fan Speed (Positioned under the Fan icon)
+  - type: state-label
+    entity: sensor.esp32_growdrobe_fan_speed
+    prefix: 'Speed: '
+    style:
+      top: 26%
+      left: 90%
+      color: '#ffffff'
+      font-size: 13px
+      font-weight: bold
+      background-color: 'rgba(0, 0, 0, 0.55)'
+      padding: 4px 8px
+      border-radius: 4px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
+
+  # 6. Grow Light Toggle (Interactive Switch mapped to the bottom-right sparkle icon)
   - type: state-icon
     entity: switch.esp32_growdrobe_light
     tap_action:
       action: toggle
     style:
-      top: 15%
-      left: 15%
-      --paper-item-icon-color: yellow
+      top: 83%
+      left: 91%
+      --paper-item-icon-color: '#ffdd00'
