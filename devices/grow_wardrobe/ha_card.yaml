@@ -1,8 +1,10 @@
 # Home Assistant Picture Elements Card Configuration
 # Place this YAML inside a 'Manual' Lovelace card in your dashboard.
 #
-# Note: The titles (Canopy, Pot, Ambient) use a clever trick where they display a
-# non-existent attribute to render as blank, displaying only the static prefix title.
+# Note: First, create three Template Helpers in the Home Assistant UI:
+# 1. Canopy Title -> sensor.canopy_title (State template: "Canopy")
+# 2. Pot Title -> sensor.pot_title (State template: "Pot")
+# 3. Ambient Title -> sensor.ambient_title (State template: "Ambient")
 
 type: picture-elements
 image: /local/growdrobe-dashboard.png
@@ -10,12 +12,11 @@ elements:
   # ==================== 1. CANOPY SENSOR (TOP) ====================
   # Title
   - type: state-label
-    entity: sensor.esp32_growdrobe_canopy_temp
-    attribute: non_existent
-    prefix: 'Canopy'
+    entity: sensor.canopy_title
     style:
       top: 13%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
@@ -26,7 +27,8 @@ elements:
     prefix: 'Temperature: '
     style:
       top: 19%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
@@ -36,7 +38,8 @@ elements:
     prefix: 'Humidity: '
     style:
       top: 25%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
@@ -44,12 +47,11 @@ elements:
   # ==================== 2. POT SENSOR (MIDDLE) ====================
   # Title
   - type: state-label
-    entity: sensor.esp32_growdrobe_pot_temp
-    attribute: non_existent
-    prefix: 'Pot'
+    entity: sensor.pot_title
     style:
       top: 43%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
@@ -60,7 +62,8 @@ elements:
     prefix: 'Temperature: '
     style:
       top: 49%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
@@ -70,7 +73,8 @@ elements:
     prefix: 'Humidity: '
     style:
       top: 55%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
@@ -78,12 +82,11 @@ elements:
   # ==================== 3. AMBIENT SENSOR (BOTTOM) ====================
   # Title
   - type: state-label
-    entity: sensor.esp32_growdrobe_ambient_temp
-    attribute: non_existent
-    prefix: 'Ambient'
+    entity: sensor.ambient_title
     style:
       top: 73%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
@@ -94,7 +97,8 @@ elements:
     prefix: 'Temperature: '
     style:
       top: 79%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#ffffff'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
@@ -104,7 +108,8 @@ elements:
     prefix: 'Humidity: '
     style:
       top: 85%
-      left: 30%
+      left: 21%
+      transform: 'translate(0, -50%)'
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
