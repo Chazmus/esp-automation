@@ -6,6 +6,9 @@ import homeassistant
 import usb
 import network
 
+def capitalize(s):
+    return s[0].upper() + s[1:] if s else ""
+
 def run(config):
     # Print node header
     print("\n========================================")
@@ -77,7 +80,7 @@ def run(config):
             print(f"Reading Temperature/Humidity Sensor ({zone})...")
             t, h = sensor.read()
             if t is not None:
-                print(f"🌡️  {zone.capitalize()} Measured: Temp={t:.2f} °C, Humidity={h:.2f} %")
+                print(f"🌡️  {capitalize(zone)} Measured: Temp={t:.2f} °C, Humidity={h:.2f} %")
                 readings[zone] = (t, h)
 
         primary_temp = None
@@ -96,12 +99,14 @@ def run(config):
                 print(f"🌱 Measured Soil Moisture: {moisture_pct:.1f}% (Raw ADC: {raw_moisture})")
 
         # Measure battery voltage and percentage
-        bat_voltage = battery.read_voltage()
-        bat_percent = battery.get_percentage(bat_voltage)
-        if bat_voltage is not None:
-            print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
-        else:
-            print("🔋 Battery sensing circuit not detected. Skipping.")
+        bat_voltage, bat_percent = None, None
+        if getattr(config, "BATTERY_MONITOR_ENABLED", getattr(config, "DEEP_SLEEP_ENABLED", False)):
+            bat_voltage = battery.read_voltage()
+            bat_percent = battery.get_percentage(bat_voltage)
+            if bat_voltage is not None:
+                print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
+            else:
+                print("🔋 Battery sensing circuit not detected. Skipping.")
 
         # --- 2. Actuator Control ---
         if fan is not None and primary_temp is not None:
@@ -129,7 +134,7 @@ def run(config):
                         t, h = values
                         if t is not None:
                             suffix = f"{zone}_temp" if zone != "default" else "temp"
-                            friendly = f"{zone.capitalize()} Temperature" if zone != "default" else "Temperature"
+                            friendly = f"{capitalize(zone)} Temperature" if zone != "default" else "Temperature"
                             homeassistant.post_device_sensor(
                                 sensor_suffix=suffix,
                                 state_value=f"{t:.2f}",
@@ -139,7 +144,7 @@ def run(config):
                             )
                         if h is not None:
                             suffix = f"{zone}_humidity" if zone != "default" else "humidity"
-                            friendly = f"{zone.capitalize()} Humidity" if zone != "default" else "Humidity"
+                            friendly = f"{capitalize(zone)} Humidity" if zone != "default" else "Humidity"
                             homeassistant.post_device_sensor(
                                 sensor_suffix=suffix,
                                 state_value=f"{h:.2f}",

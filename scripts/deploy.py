@@ -33,6 +33,32 @@ def webrepl_soft_reset(project_root, ip, password):
         print(f"⚠️ WebREPL soft-reset failed: {e}")
         return False
 
+def webrepl_run_exec(project_root, ip, password, py_cmd):
+    sys.path.insert(0, os.path.join(project_root, "scripts"))
+    import webrepl_cli
+    import socket
+    try:
+        s = socket.socket()
+        s.settimeout(3)
+        s.connect((ip, 8266))
+        webrepl_cli.client_handshake(s)
+        ws = webrepl_cli.websocket(s)
+        webrepl_cli.login(ws, password)
+        # Send Ctrl+C to interrupt any running script
+        ws.write(b"\x03", frame=0x81)
+        time.sleep(0.5)
+        # Send command
+        ws.write(py_cmd.encode('utf-8') + b"\r", frame=0x81)
+        time.sleep(0.5)
+        print("🔄 WebREPL remote exec command sent successfully.")
+        return True
+    except Exception as e:
+        print(f"⚠️ WebREPL remote exec failed: {e}")
+        return False
+
+
+
+
 
 
 def get_available_devices(project_root):
@@ -122,46 +148,79 @@ def main():
         time.sleep(1)
 
     
-    # 5. Create /lib directory on the microcontroller if it doesn't exist (Only for serial)
-    if not is_remote:
-        print("📁 Preparing /lib directory on microcontroller...")
-        mpremote_cmd_mkdir = cmd_prefix + [
-            mpremote, "connect", port, "resume", "exec", 
-            "import os; 'lib' in os.listdir() or os.mkdir('lib')"
-        ]
-        try:
-            subprocess.run(mpremote_cmd_mkdir, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Error preparing /lib: {e}", file=sys.stderr)
-            sys.exit(e.returncode)
-        
-    # 6. Upload shared libraries from lib/ folder to :lib/
+    # 5. Build list of files and directories to copy from /lib
     shared_lib_dir = os.path.join(project_root, "lib")
+    lib_files = []
+    dest_dirs = set()
     if os.path.isdir(shared_lib_dir):
-        lib_files = glob.glob(os.path.join(shared_lib_dir, "*.py"))
-        if lib_files:
-            print(f"📤 Synchronizing shared libraries to /lib on {device}...")
+        for root, dirs, files in os.walk(shared_lib_dir):
+            if "__pycache__" in dirs:
+                dirs.remove("__pycache__")
+            for f in files:
+                if f.endswith(".py"):
+                    filepath = os.path.join(root, f)
+                    lib_files.append(filepath)
+                    
+                    # Compute required destination directories
+                    relpath = os.path.relpath(filepath, shared_lib_dir)
+                    parts = relpath.split(os.sep)[:-1]
+                    curr = "lib"
+                    dest_dirs.add(curr)
+                    for part in parts:
+                        curr = f"{curr}/{part}"
+                        dest_dirs.add(curr)
+                        
+    sorted_dest_dirs = sorted(list(dest_dirs), key=len)
+
+    # 6. Create directories on the microcontroller
+    if sorted_dest_dirs:
+        print("📁 Preparing directory structure on microcontroller...")
+        if is_remote:
             import secrets
-            for filepath in sorted(lib_files):
-                filename = os.path.basename(filepath)
-                print(f"   👉 Deploying shared {os.path.relpath(filepath, project_root)} to :lib/{filename}...")
-                if is_remote:
-                    try:
-                        webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
-                        subprocess.run([
-                            sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
-                            filepath, f"{ip_addr}:lib/{filename}"
-                        ], check=True)
-                    except subprocess.CalledProcessError as e:
-                        print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
-                        sys.exit(e.returncode)
-                else:
-                    mpremote_cmd_cp = cmd_prefix + [mpremote, "connect", port, "resume", "cp", filepath, f":lib/{filename}"]
-                    try:
-                        subprocess.run(mpremote_cmd_cp, check=True)
-                    except subprocess.CalledProcessError as e:
-                        print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
-                        sys.exit(e.returncode)
+            # Build Python commands to run remotely via WebREPL to create dirs
+            dir_creation_code = "; ".join([
+                f"'{os.path.basename(d)}' in os.listdir() or os.mkdir('{d}')" if '/' not in d else f"'{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}') or os.mkdir('{d}')"
+                for d in sorted_dest_dirs
+            ])
+            py_cmd = f"import os; {dir_creation_code}"
+            webrepl_run_exec(project_root, ip_addr, secrets.WEBREPL_PASSWORD, py_cmd)
+        else:
+            for d in sorted_dest_dirs:
+                mpremote_cmd_mkdir = cmd_prefix + [
+                    mpremote, "connect", port, "resume", "exec", 
+                    f"import os; '{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}' or '.') or os.mkdir('{d}')"
+                ]
+                try:
+                    subprocess.run(mpremote_cmd_mkdir, check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"❌ Error preparing folder {d}: {e}", file=sys.stderr)
+                    sys.exit(e.returncode)
+
+    # 7. Upload shared libraries from lib/ folder recursively to :lib/
+    if lib_files:
+        print(f"📤 Synchronizing shared libraries to /lib on {device}...")
+        import secrets
+        for filepath in sorted(lib_files):
+            relpath = os.path.relpath(filepath, shared_lib_dir).replace(os.sep, '/')
+            remote_dest = f"lib/{relpath}"
+            print(f"   👉 Deploying shared {os.path.relpath(filepath, project_root)} to :{remote_dest}...")
+            if is_remote:
+                try:
+                    webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
+                    subprocess.run([
+                        sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
+                        filepath, f"{ip_addr}:{remote_dest}"
+                    ], check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"❌ Error copying {relpath}: {e}", file=sys.stderr)
+                    sys.exit(e.returncode)
+            else:
+                mpremote_cmd_cp = cmd_prefix + [mpremote, "connect", port, "resume", "cp", filepath, f":{remote_dest}"]
+                try:
+                    subprocess.run(mpremote_cmd_cp, check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"❌ Error copying {relpath}: {e}", file=sys.stderr)
+                    sys.exit(e.returncode)
                     
     # 7. Upload device-specific files from devices/$DEVICE/ folder to microcontroller root (/)
     device_dir = os.path.join(project_root, "devices", device)
