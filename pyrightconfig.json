@@ -1,7 +1,9 @@
 {
   "venvPath": ".",
   "venv": ".venv",
+  "pythonPath": ".venv/bin/python",
   "extraPaths": [
-    "lib"
+    "lib",
+    ".venv/lib/python3.14/site-packages"
   ]
 }

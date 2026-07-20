@@ -1,5 +1,6 @@
 import machine
 import time
+import math
 import battery
 import wifi
 import homeassistant
@@ -8,6 +9,11 @@ import network
 
 def capitalize(s):
     return s[0].upper() + s[1:] if s else ""
+
+def calculate_svp(temp):
+    if temp is None:
+        return 0.0
+    return 0.61078 * math.exp((17.27 * temp) / (temp + 237.3))
 
 def run(config):
     # Print node header
@@ -69,6 +75,11 @@ def run(config):
         cfg = config.LIGHT_RELAY
         light_relay = Relay(pin=cfg["pin"])
 
+    # Filter state and PI controller state
+    filtered_temps = {}
+    filtered_humidities = {}
+    integral_error = 0.0
+
     # Main Loop
     while True:
         sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
@@ -80,8 +91,25 @@ def run(config):
             print(f"Reading Temperature/Humidity Sensor ({zone})...")
             t, h = sensor.read()
             if t is not None:
-                print(f"🌡️  {capitalize(zone)} Measured: Temp={t:.2f} °C, Humidity={h:.2f} %")
-                readings[zone] = (t, h)
+                alpha = 0.2
+                if getattr(config, "PWM_FAN", None) and isinstance(config.PWM_FAN, dict):
+                    alpha = config.PWM_FAN.get("ema_alpha", 0.2)
+                
+                if zone in filtered_temps and filtered_temps[zone] is not None:
+                    t_filt = alpha * t + (1 - alpha) * filtered_temps[zone]
+                else:
+                    t_filt = t
+                filtered_temps[zone] = t_filt
+                
+                if zone in filtered_humidities and filtered_humidities[zone] is not None:
+                    h_filt = alpha * h + (1 - alpha) * filtered_humidities[zone]
+                else:
+                    h_filt = h
+                filtered_humidities[zone] = h_filt
+                
+                print(f"🌡️  {capitalize(zone)} Measured (Raw): Temp={t:.2f} °C, Humidity={h:.2f} %")
+                print(f"🌡️  {capitalize(zone)} Filtered: Temp={t_filt:.2f} °C, Humidity={h_filt:.2f} %")
+                readings[zone] = (t_filt, h_filt)
 
         primary_temp = None
         if "canopy" in readings:
@@ -109,14 +137,91 @@ def run(config):
                 print("🔋 Battery sensing circuit not detected. Skipping.")
 
         # --- 2. Actuator Control ---
-        if fan is not None and primary_temp is not None:
+        if fan is not None:
             cfg = config.PWM_FAN
-            if primary_temp > cfg.get("target_temp", 28.0):
-                fan.set_speed(100)
-                print("💨 Fan speed set to 100% (temperature high)")
-            else:
-                fan.set_speed(30)
-                print("💨 Fan speed set to 30% (temperature normal)")
+            # Check if advanced VPD control is configured and canopy sensor is present
+            if "target_vpd" in cfg and "canopy" in readings:
+                target_vpd = cfg.get("target_vpd")
+                kp = cfg.get("kp", 45.0)
+                ki = cfg.get("ki", 0.02)
+                min_speed = cfg.get("min_speed", 30)
+                max_speed = cfg.get("max_speed", 100)
+                
+                # Safety override thresholds
+                max_safe_temp = cfg.get("max_safe_temp", 30.0)
+                min_safe_temp = cfg.get("min_safe_temp", 16.0)
+                max_safe_humidity = cfg.get("max_safe_humidity", 65.0)
+                
+                leaf_offset = cfg.get("leaf_temp_offset", 2.0)
+                deadband = cfg.get("deadband", 0.05)
+                
+                canopy_temp, canopy_humidity = readings["canopy"]
+                
+                # Safety constraints checks
+                if canopy_temp > max_safe_temp:
+                    fan.set_speed(100)
+                    print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe ({max_safe_temp}°C). Speed set to 100%.")
+                elif canopy_humidity > max_safe_humidity:
+                    fan.set_speed(100)
+                    print(f"💨 OVERRIDE: Canopy Humidity ({canopy_humidity:.1f}%) > max safe ({max_safe_humidity}%). Speed set to 100%.")
+                elif canopy_temp < min_safe_temp:
+                    fan.set_speed(min_speed)
+                    print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe ({min_safe_temp}°C). Speed set to {min_speed}%.")
+                else:
+                    # Calculate leaf VPD
+                    leaf_temp = canopy_temp - leaf_offset
+                    svp_leaf = calculate_svp(leaf_temp)
+                    svp_air = calculate_svp(canopy_temp)
+                    avp_air = svp_air * (canopy_humidity / 100.0)
+                    vpd_leaf = max(0.0, svp_leaf - avp_air)
+                    
+                    error = target_vpd - vpd_leaf
+                    
+                    # Apply deadband
+                    if abs(error) < deadband:
+                        error = 0.0
+                    
+                    # Ambient checks: calculate absolute humidity/moisture
+                    ambient_clamp = False
+                    avp_ambient = 0.0
+                    if "ambient" in readings and error > 0.0:
+                        ambient_temp, ambient_humidity = readings["ambient"]
+                        svp_ambient = calculate_svp(ambient_temp)
+                        avp_ambient = svp_ambient * (ambient_humidity / 100.0)
+                        
+                        # If ambient air has more or equal absolute water vapor, do not vent to dehumidify
+                        if avp_ambient >= avp_air:
+                            ambient_clamp = True
+                            
+                    if ambient_clamp:
+                        fan.set_speed(min_speed)
+                        print(f"💨 CLAMP: Canopy VPD ({vpd_leaf:.2f} kPa) < Target ({target_vpd:.2f} kPa) [too humid], but ambient room is wetter (AVP ambient {avp_ambient:.2f} >= AVP inside {avp_air:.2f}). Fan speed set to {min_speed}%.")
+                    else:
+                        # Update integral term with anti-windup clamping
+                        # Limit integral error to bounds that are physically realizable.
+                        # Since base speed is min_speed, integral_error should not be negative.
+                        integral_error += ki * error * sleep_seconds
+                        max_i = float(max_speed - min_speed)
+                        if integral_error > max_i:
+                            integral_error = max_i
+                        elif integral_error < 0.0:
+                            integral_error = 0.0
+                            
+                        p_term = kp * error
+                        speed = min_speed + p_term + integral_error
+                        speed = max(min_speed, min(max_speed, int(speed)))
+                        
+                        fan.set_speed(speed)
+                        print(f"💨 VPD Loop: Leaf VPD = {vpd_leaf:.2f} kPa (Target: {target_vpd:.2f} kPa, Error: {error:.2f}). P={p_term:.1f}, I={integral_error:.1f}. Fan speed set to {speed}%.")
+                        
+            elif primary_temp is not None:
+                # Legacy simple temp-threshold control fallback
+                if primary_temp > cfg.get("target_temp", 28.0):
+                    fan.set_speed(100)
+                    print("💨 Fan speed set to 100% (temperature high)")
+                else:
+                    fan.set_speed(30)
+                    print("💨 Fan speed set to 30% (temperature normal)")
                 
         if light_relay is not None:
             # Placeholder: Keep light relay turned on. Customize scheduling logic here.
