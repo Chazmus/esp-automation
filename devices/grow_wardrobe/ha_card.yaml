@@ -1,76 +1,116 @@
 # Home Assistant Picture Elements Card Configuration
 # Place this YAML inside a 'Manual' Lovelace card in your dashboard.
 #
-# IMPORTANT:
-# First, copy the background image (~/Downloads/growdrobe-dashboard.png) to your
-# Home Assistant config's 'www' folder so it is served locally at:
-# /local/growdrobe-dashboard.png
-#
-# You can copy it via SCP, Samba, or through the Home Assistant File Editor.
-# E.g., command:
-# scp ~/Downloads/growdrobe-dashboard.png <ha-username>@192.168.86.238:/config/www/
+# Note: The titles (Canopy, Pot, Ambient) use a clever trick where they display a
+# non-existent attribute to render as blank, displaying only the static prefix title.
 
 type: picture-elements
 image: /local/growdrobe-dashboard.png
 elements:
-  # 1. Canopy Sensor (Top Thermometer)
+  # ==================== 1. CANOPY SENSOR (TOP) ====================
+  # Title
   - type: state-label
     entity: sensor.esp32_growdrobe_canopy_temp
+    attribute: non_existent
+    prefix: 'Canopy'
     style:
-      top: 15%
-      left: 23%
+      top: 13%
+      left: 30%
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
       text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  # Temperature
+  - type: state-label
+    entity: sensor.esp32_growdrobe_canopy_temp
+    prefix: 'Temperature: '
+    style:
+      top: 19%
+      left: 30%
+      color: '#ffffff'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
+  # Humidity
   - type: state-label
     entity: sensor.esp32_growdrobe_canopy_humidity
+    prefix: 'Humidity: '
     style:
-      top: 24%
-      left: 23%
+      top: 25%
+      left: 30%
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
 
-  # 2. Pot Sensor (Middle Thermometer)
+  # ==================== 2. POT SENSOR (MIDDLE) ====================
+  # Title
   - type: state-label
     entity: sensor.esp32_growdrobe_pot_temp
+    attribute: non_existent
+    prefix: 'Pot'
     style:
-      top: 45%
-      left: 23%
+      top: 43%
+      left: 30%
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
       text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  # Temperature
+  - type: state-label
+    entity: sensor.esp32_growdrobe_pot_temp
+    prefix: 'Temperature: '
+    style:
+      top: 49%
+      left: 30%
+      color: '#ffffff'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
+  # Humidity
   - type: state-label
     entity: sensor.esp32_growdrobe_pot_humidity
+    prefix: 'Humidity: '
     style:
-      top: 54%
-      left: 23%
+      top: 55%
+      left: 30%
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
 
-  # 3. Ambient Sensor (Bottom Thermometer)
+  # ==================== 3. AMBIENT SENSOR (BOTTOM) ====================
+  # Title
   - type: state-label
     entity: sensor.esp32_growdrobe_ambient_temp
+    attribute: non_existent
+    prefix: 'Ambient'
     style:
-      top: 75%
-      left: 23%
+      top: 73%
+      left: 30%
       color: '#ffffff'
       font-size: 16px
       font-weight: bold
       text-shadow: 1px 1px 3px rgba(0,0,0,0.9)
+  # Temperature
+  - type: state-label
+    entity: sensor.esp32_growdrobe_ambient_temp
+    prefix: 'Temperature: '
+    style:
+      top: 79%
+      left: 30%
+      color: '#ffffff'
+      font-size: 13px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
+  # Humidity
   - type: state-label
     entity: sensor.esp32_growdrobe_ambient_humidity
+    prefix: 'Humidity: '
     style:
-      top: 84%
-      left: 23%
+      top: 85%
+      left: 30%
       color: '#a0a0a0'
       font-size: 13px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9)
 
-  # 4. Soil Moisture (Positioned over the soil/pot area)
+  # ==================== 4. SOIL MOISTURE ====================
+  # Soil Moisture (No green background, overlayed over pot)
   - type: state-label
     entity: sensor.esp32_growdrobe_moisture
     prefix: 'Moisture: '
@@ -80,12 +120,10 @@ elements:
       color: '#ffffff'
       font-size: 15px
       font-weight: bold
-      background-color: 'rgba(34, 139, 34, 0.65)'
-      padding: 4px 8px
-      border-radius: 4px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
 
-  # 5. Fan Speed (Positioned under the Fan icon)
+  # ==================== 5. FAN SPEED ====================
+  # Fan Speed (Under the Fan icon)
   - type: state-label
     entity: sensor.esp32_growdrobe_fan_speed
     prefix: 'Speed: '
@@ -100,7 +138,8 @@ elements:
       border-radius: 4px
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
 
-  # 6. Grow Light Toggle (Interactive Switch mapped to the bottom-right sparkle icon)
+  # ==================== 6. GROW LIGHT ====================
+  # Grow Light Toggle (Over sparkle icon)
   - type: state-icon
     entity: switch.esp32_growdrobe_light
     tap_action:
