@@ -80,6 +80,10 @@ def run(config):
     filtered_humidities = {}
     integral_error = 0.0
 
+    # Initialize AlertManager
+    from lib.alerts import AlertManager
+    alert_manager = AlertManager(config)
+
     # Main Loop
     while True:
         sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
@@ -229,12 +233,30 @@ def run(config):
             print("💡 Light Relay state: ON")
 
         # --- 3. WiFi Sync and Posting ---
+        status_str, severity, active_alerts = alert_manager.evaluate(readings)
+        if active_alerts:
+            print(f"⚠️ Active Alerts: {status_str} (Severity: {severity})")
+        else:
+            print("💚 System Status: Normal")
+
         has_temp_readings = any(t is not None for t, h in readings.values())
         has_data = has_temp_readings or (moisture_pct is not None) or (bat_voltage is not None)
         if has_data:
             print("Connecting to WiFi...")
             if wifi.connect():
                 try:
+                    # Post system alert status sensor
+                    homeassistant.post_device_sensor(
+                        sensor_suffix="status",
+                        state_value=status_str,
+                        friendly_suffix="Status",
+                        extra_attributes={
+                            "severity": severity,
+                            "alert_count": len(active_alerts),
+                            "active_alerts": active_alerts
+                        }
+                    )
+                    
                     for zone, values in readings.items():
                         t, h = values
                         if t is not None:

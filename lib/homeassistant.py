@@ -2,7 +2,7 @@ import urequests
 import json
 import secrets
 
-def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of_measurement=None, device_class=None):
+def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of_measurement=None, device_class=None, extra_attributes=None):
     """
     Helper function to post a sensor state for the current device.
     Automatically prepends 'esp32_{secrets.DEVICE_NAME}_' to the sensor ID
@@ -16,11 +16,12 @@ def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of
         state_value=state_value,
         friendly_name=friendly_name,
         unit_of_measurement=unit_of_measurement,
-        device_class=device_class
+        device_class=device_class,
+        extra_attributes=extra_attributes
     )
 
 
-def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=None, device_class=None):
+def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=None, device_class=None, extra_attributes=None):
     """
     Posts a sensor state to Home Assistant's REST API.
     The entity 'sensor.<sensor_id>' will be created or updated in Home Assistant.
@@ -47,6 +48,8 @@ def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=N
         attributes["unit_of_measurement"] = unit_of_measurement
     if device_class:
         attributes["device_class"] = device_class
+    if extra_attributes:
+        attributes.update(extra_attributes)
         
     payload = {
         "state": str(state_value),

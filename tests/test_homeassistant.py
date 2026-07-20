@@ -17,6 +17,7 @@ from lib.homeassistant import post_state, post_device_sensor
 class TestHomeAssistant:
     def setup_method(self):
         urequests_mock.post.reset_mock()
+        urequests_mock.post.side_effect = None
 
     def test_post_state_success(self):
         # Mock successful response
@@ -86,5 +87,28 @@ class TestHomeAssistant:
             state_value="22.5",
             friendly_name="ESP32 test_device Temperature",
             unit_of_measurement="°C",
-            device_class="temperature"
+            device_class="temperature",
+            extra_attributes=None
         )
+
+    def test_post_state_with_extra_attributes(self):
+        response_mock = MagicMock()
+        response_mock.status_code = 200
+        urequests_mock.post.return_value = response_mock
+
+        success = post_state(
+            sensor_id="test_sensor_attrs",
+            state_value="Normal",
+            extra_attributes={
+                "severity": "normal",
+                "alert_count": 0
+            }
+        )
+
+        assert success is True
+        args, kwargs = urequests_mock.post.call_args
+        payload = json.loads(kwargs["data"].decode('utf-8'))
+        
+        assert payload["state"] == "Normal"
+        assert payload["attributes"]["severity"] == "normal"
+        assert payload["attributes"]["alert_count"] == 0
