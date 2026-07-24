@@ -197,9 +197,21 @@ def run(config):
                         if avp_ambient >= avp_air:
                             ambient_clamp = True
                             
+                    # Calculate proportional temperature speed
+                    temp_threshold = cfg.get("target_temp", max_safe_temp - 2.0)
+                    temp_speed = min_speed
+                    if canopy_temp > temp_threshold:
+                        temp_range = max_safe_temp - temp_threshold
+                        if temp_range > 0:
+                            temp_speed = min_speed + (max_speed - min_speed) * ((canopy_temp - temp_threshold) / temp_range)
+                            
                     if ambient_clamp:
-                        fan.set_speed(min_speed)
-                        print(f"💨 CLAMP: Canopy VPD ({vpd_leaf:.2f} kPa) < Target ({target_vpd:.2f} kPa) [too humid], but ambient room is wetter (AVP ambient {avp_ambient:.2f} >= AVP inside {avp_air:.2f}). Fan speed set to {min_speed}%.")
+                        speed = max(min_speed, min(max_speed, int(temp_speed)))
+                        fan.set_speed(speed)
+                        if speed > min_speed:
+                            print(f"💨 TEMP OVERRIDE (Clamp Active): Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%.")
+                        else:
+                            print(f"💨 CLAMP: Canopy VPD ({vpd_leaf:.2f} kPa) < Target ({target_vpd:.2f} kPa) [too humid], but ambient room is wetter (AVP ambient {avp_ambient:.2f} >= AVP inside {avp_air:.2f}). Fan speed set to {min_speed}%.")
                     else:
                         # Update integral term with anti-windup clamping
                         # Limit integral error to bounds that are physically realizable.
@@ -212,11 +224,16 @@ def run(config):
                             integral_error = 0.0
                             
                         p_term = kp * error
-                        speed = min_speed + p_term + integral_error
-                        speed = max(min_speed, min(max_speed, int(speed)))
+                        vpd_speed = min_speed + p_term + integral_error
+                        
+                        speed = max(int(vpd_speed), int(temp_speed))
+                        speed = max(min_speed, min(max_speed, speed))
                         
                         fan.set_speed(speed)
-                        print(f"💨 VPD Loop: Leaf VPD = {vpd_leaf:.2f} kPa (Target: {target_vpd:.2f} kPa, Error: {error:.2f}). P={p_term:.1f}, I={integral_error:.1f}. Fan speed set to {speed}%.")
+                        if speed > max(min_speed, int(vpd_speed)):
+                            print(f"💨 TEMP OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%. (VPD wanted {max(min_speed, int(vpd_speed))}%)")
+                        else:
+                            print(f"💨 VPD Loop: Leaf VPD = {vpd_leaf:.2f} kPa (Target: {target_vpd:.2f} kPa, Error: {error:.2f}). P={p_term:.1f}, I={integral_error:.1f}. Fan speed set to {speed}%.")
                         
             elif primary_temp is not None:
                 # Legacy simple temp-threshold control fallback
