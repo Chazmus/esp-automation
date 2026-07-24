@@ -148,7 +148,7 @@ graph TD
 | **GPIO 3** | Digital Output | Relay Channel 2 IN | Switches 12V Runoff Pump |
 | **GPIO 4** | Digital Output | Relay Channel 3 IN | Switches 12V Agitation Pump |
 | **GPIO 13** | Digital Output | Relay Channel 4 IN | Switches 12V Grow Light (or Spare) |
-| **GPIO 12** | PWM Output | Noctua PWM Fan Speed pin | Controls variable speed ventilation |
+| **GPIO 1** | PWM Output | Noctua PWM Fan Speed pin | Controls variable speed ventilation |
 | **GPIO 5** | SoftI2C SDA 1 | Canopy AHT20 SDA | Temperature/Humidity (Canopy) |
 | **GPIO 6** | SoftI2C SCL 1 | Canopy AHT20 SCL | Temperature/Humidity (Canopy) |
 | **GPIO 7** | SoftI2C SDA 2 | Pot AHT20 SDA | Temperature/Humidity (Soil Level) |

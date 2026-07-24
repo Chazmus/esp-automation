@@ -75,21 +75,49 @@ def connect():
             print(f"⚠️ Could not set static IP configuration: {e}")
             
     print(f"Connecting to WiFi network '{ssid}'...")
-    wlan.connect(ssid, password)
+    
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        print(f"📡 WiFi Connection Attempt {attempt}/{max_retries}...")
+        try:
+            wlan.disconnect()
+            time.sleep(0.2)
+            wlan.connect(ssid, password)
+        except Exception as e:
+            print(f"  Connect notice: {e}")
 
-    
-    # 6. Wait for connection or timeout (15 seconds)
-    timeout = 15
-    start_time = time.time()
-    
-    while not wlan.isconnected():
-        if time.time() - start_time > timeout:
-            print(f"\n❌ Failed to connect: WiFi connection timeout. Final Status: {get_status_desc(wlan.status())}")
-            return False
             
-        print(f"  Status: {get_status_desc(wlan.status())}")
+        timeout = 8
+        start_time = time.time()
+        while not wlan.isconnected():
+            status = wlan.status()
+            if time.time() - start_time > timeout:
+                print(f"  Attempt {attempt} timed out. Status: {get_status_desc(status)}")
+                break
+            
+            # If ESP32 reports transient handshake failure, re-trigger attempt
+            if status in (201, 202, 203, 204) and (time.time() - start_time) > 2:
+                print(f"  Transient status: {get_status_desc(status)}. Retrying...")
+                break
+                
+            print(f"  Status: {get_status_desc(status)}")
+            time.sleep(1.0)
+            
+        if wlan.isconnected():
+            break
         time.sleep(1.0)
         
+    if not wlan.isconnected():
+        print(f"\n❌ Failed to connect after {max_retries} attempts. Final Status: {get_status_desc(wlan.status())}")
+        return False
+
     print("\n✅ Connected successfully!")
     print("   IP Configuration:", wlan.ifconfig())
+    try:
+        import webrepl
+        webrepl.start()
+    except Exception as e:
+        print(f"⚠️ Could not start WebREPL: {e}")
     return True
+
+

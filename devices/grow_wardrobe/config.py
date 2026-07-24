@@ -35,7 +35,7 @@ SOIL_MOISTURE_SENSOR = {
 }
 
 PWM_FAN = {
-    "pin": 12,
+    "pin": 1,
     "freq": 25000,
     "target_temp": 28.0,         # fallback threshold
     
@@ -58,5 +58,6 @@ PWM_FAN = {
 }
 
 LIGHT_RELAY = {
-    "pin": 13
+    "pin": 20
 }
+
