@@ -84,15 +84,30 @@ def run(config):
     from lib.alerts import AlertManager
     alert_manager = AlertManager(config)
 
+    # Timer tracking
+    last_post_time = 0  # Force an immediate post on the first loop
+    last_control_time = time.ticks_ms()
+
     # Main Loop
     while True:
         sleep_seconds = getattr(config, "SLEEP_SECONDS", 900)
         deep_sleep_enabled = getattr(config, "DEEP_SLEEP_ENABLED", False)
         
+        current_time = time.ticks_ms()
+        
+        # Calculate exact dt for accurate PI math
+        dt_ms = time.ticks_diff(current_time, last_control_time)
+        dt_seconds = dt_ms / 1000.0 if dt_ms > 0 else 1.0
+        last_control_time = current_time
+
+        ha_interval_ms = sleep_seconds * 1000
+        should_post = deep_sleep_enabled or (time.ticks_diff(current_time, last_post_time) >= ha_interval_ms)
+        
         # --- 1. Read Sensors BEFORE WiFi ---
         readings = {}
         for zone, sensor in temp_sensors.items():
-            print(f"Reading Temperature/Humidity Sensor ({zone})...")
+            if should_post:
+                print(f"Reading Temperature/Humidity Sensor ({zone})...")
             t, h = sensor.read()
             if t is not None:
                 alpha = 0.2
@@ -111,8 +126,9 @@ def run(config):
                     h_filt = h
                 filtered_humidities[zone] = h_filt
                 
-                print(f"🌡️  {capitalize(zone)} Measured (Raw): Temp={t:.2f} °C, Humidity={h:.2f} %")
-                print(f"🌡️  {capitalize(zone)} Filtered: Temp={t_filt:.2f} °C, Humidity={h_filt:.2f} %")
+                if should_post:
+                    print(f"🌡️  {capitalize(zone)} Measured (Raw): Temp={t:.2f} °C, Humidity={h:.2f} %")
+                    print(f"🌡️  {capitalize(zone)} Filtered: Temp={t_filt:.2f} °C, Humidity={h_filt:.2f} %")
                 readings[zone] = (t_filt, h_filt)
 
         primary_temp = None
@@ -125,9 +141,10 @@ def run(config):
 
         raw_moisture, moisture_pct = None, None
         if soil_sensor is not None:
-            print("Reading Soil Moisture Sensor...")
+            if should_post:
+                print("Reading Soil Moisture Sensor...")
             raw_moisture, moisture_pct = soil_sensor.read()
-            if moisture_pct is not None:
+            if moisture_pct is not None and should_post:
                 print(f"🌱 Measured Soil Moisture: {moisture_pct:.1f}% (Raw ADC: {raw_moisture})")
 
         # Measure battery voltage and percentage
@@ -135,10 +152,11 @@ def run(config):
         if getattr(config, "BATTERY_MONITOR_ENABLED", getattr(config, "DEEP_SLEEP_ENABLED", False)):
             bat_voltage = battery.read_voltage()
             bat_percent = battery.get_percentage(bat_voltage)
-            if bat_voltage is not None:
-                print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
-            else:
-                print("🔋 Battery sensing circuit not detected. Skipping.")
+            if should_post:
+                if bat_voltage is not None:
+                    print(f"🔋 Battery: {bat_voltage:.2f}V ({bat_percent:.1f}%)")
+                else:
+                    print("🔋 Battery sensing circuit not detected. Skipping.")
 
         # --- 2. Actuator Control ---
         if fan is not None:
@@ -164,13 +182,16 @@ def run(config):
                 # Safety constraints checks
                 if canopy_temp > max_safe_temp:
                     fan.set_speed(100)
-                    print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe ({max_safe_temp}°C). Speed set to 100%.")
+                    if should_post:
+                        print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe ({max_safe_temp}°C). Speed set to 100%.")
                 elif canopy_humidity > max_safe_humidity:
                     fan.set_speed(100)
-                    print(f"💨 OVERRIDE: Canopy Humidity ({canopy_humidity:.1f}%) > max safe ({max_safe_humidity}%). Speed set to 100%.")
+                    if should_post:
+                        print(f"💨 OVERRIDE: Canopy Humidity ({canopy_humidity:.1f}%) > max safe ({max_safe_humidity}%). Speed set to 100%.")
                 elif canopy_temp < min_safe_temp:
                     fan.set_speed(min_speed)
-                    print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe ({min_safe_temp}°C). Speed set to {min_speed}%.")
+                    if should_post:
+                        print(f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe ({min_safe_temp}°C). Speed set to {min_speed}%.")
                 else:
                     # Calculate leaf VPD
                     leaf_temp = canopy_temp - leaf_offset
@@ -208,15 +229,16 @@ def run(config):
                     if ambient_clamp:
                         speed = max(min_speed, min(max_speed, int(temp_speed)))
                         fan.set_speed(speed)
-                        if speed > min_speed:
-                            print(f"💨 TEMP OVERRIDE (Clamp Active): Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%.")
-                        else:
-                            print(f"💨 CLAMP: Canopy VPD ({vpd_leaf:.2f} kPa) < Target ({target_vpd:.2f} kPa) [too humid], but ambient room is wetter (AVP ambient {avp_ambient:.2f} >= AVP inside {avp_air:.2f}). Fan speed set to {min_speed}%.")
+                        if should_post:
+                            if speed > min_speed:
+                                print(f"💨 TEMP OVERRIDE (Clamp Active): Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%.")
+                            else:
+                                print(f"💨 CLAMP: Canopy VPD ({vpd_leaf:.2f} kPa) < Target ({target_vpd:.2f} kPa) [too humid], but ambient room is wetter (AVP ambient {avp_ambient:.2f} >= AVP inside {avp_air:.2f}). Fan speed set to {min_speed}%.")
                     else:
                         # Update integral term with anti-windup clamping
                         # Limit integral error to bounds that are physically realizable.
                         # Since base speed is min_speed, integral_error should not be negative.
-                        integral_error += ki * error * sleep_seconds
+                        integral_error += ki * error * dt_seconds
                         max_i = float(max_speed - min_speed)
                         if integral_error > max_i:
                             integral_error = max_i
@@ -230,121 +252,132 @@ def run(config):
                         speed = max(min_speed, min(max_speed, speed))
                         
                         fan.set_speed(speed)
-                        if speed > max(min_speed, int(vpd_speed)):
-                            print(f"💨 TEMP OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%. (VPD wanted {max(min_speed, int(vpd_speed))}%)")
-                        else:
-                            print(f"💨 VPD Loop: Leaf VPD = {vpd_leaf:.2f} kPa (Target: {target_vpd:.2f} kPa, Error: {error:.2f}). P={p_term:.1f}, I={integral_error:.1f}. Fan speed set to {speed}%.")
+                        if should_post:
+                            if speed > max(min_speed, int(vpd_speed)):
+                                print(f"💨 TEMP OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) scaling fan to {speed}%. (VPD wanted {max(min_speed, int(vpd_speed))}%)")
+                            else:
+                                print(f"💨 VPD Loop: Leaf VPD = {vpd_leaf:.2f} kPa (Target: {target_vpd:.2f} kPa, Error: {error:.2f}). P={p_term:.1f}, I={integral_error:.1f}. Fan speed set to {speed}%.")
                         
             elif primary_temp is not None:
                 # Legacy simple temp-threshold control fallback
                 if primary_temp > cfg.get("target_temp", 28.0):
                     fan.set_speed(100)
-                    print("💨 Fan speed set to 100% (temperature high)")
+                    if should_post:
+                        print("💨 Fan speed set to 100% (temperature high)")
                 else:
                     fan.set_speed(30)
-                    print("💨 Fan speed set to 30% (temperature normal)")
+                    if should_post:
+                        print("💨 Fan speed set to 30% (temperature normal)")
                 
         if light_relay is not None:
             # Placeholder: Keep light relay turned on. Customize scheduling logic here.
             light_relay.on()
-            print("💡 Light Relay state: ON")
+            if should_post:
+                print("💡 Light Relay state: ON")
 
         # --- 3. WiFi Sync and Posting ---
-        status_str, severity, active_alerts = alert_manager.evaluate(readings)
-        if active_alerts:
-            print(f"⚠️ Active Alerts: {status_str} (Severity: {severity})")
-        else:
-            print("💚 System Status: Normal")
-
-        has_temp_readings = any(t is not None for t, h in readings.values())
-        has_data = has_temp_readings or (moisture_pct is not None) or (bat_voltage is not None)
-        if has_data:
-            print("Connecting to WiFi...")
-            if wifi.connect():
-                try:
-                    # Post system alert status sensor
-                    homeassistant.post_device_sensor(
-                        sensor_suffix="status",
-                        state_value=status_str,
-                        friendly_suffix="Status",
-                        extra_attributes={
-                            "severity": severity,
-                            "alert_count": len(active_alerts),
-                            "active_alerts": active_alerts
-                        }
-                    )
-                    
-                    for zone, values in readings.items():
-                        t, h = values
-                        if t is not None:
-                            suffix = f"{zone}_temp" if zone != "default" else "temp"
-                            friendly = f"{capitalize(zone)} Temperature" if zone != "default" else "Temperature"
+        if should_post:
+            last_post_time = current_time
+            status_str, severity, active_alerts = alert_manager.evaluate(readings)
+            if active_alerts:
+                print(f"⚠️ Active Alerts: {status_str} (Severity: {severity})")
+            else:
+                print("💚 System Status: Normal")
+    
+            has_temp_readings = any(t is not None for t, h in readings.values())
+            has_data = has_temp_readings or (moisture_pct is not None) or (bat_voltage is not None)
+            if has_data:
+                print("Connecting to WiFi...")
+                if wifi.connect():
+                    try:
+                        # Post system alert status sensor
+                        homeassistant.post_device_sensor(
+                            sensor_suffix="status",
+                            state_value=status_str,
+                            friendly_suffix="Status",
+                            extra_attributes={
+                                "severity": severity,
+                                "alert_count": len(active_alerts),
+                                "active_alerts": active_alerts
+                            }
+                        )
+                        
+                        for zone, values in readings.items():
+                            t, h = values
+                            if t is not None:
+                                suffix = f"{zone}_temp" if zone != "default" else "temp"
+                                friendly = f"{capitalize(zone)} Temperature" if zone != "default" else "Temperature"
+                                homeassistant.post_device_sensor(
+                                    sensor_suffix=suffix,
+                                    state_value=f"{t:.2f}",
+                                    friendly_suffix=friendly,
+                                    unit_of_measurement="°C",
+                                    device_class="temperature"
+                                )
+                            if h is not None:
+                                suffix = f"{zone}_humidity" if zone != "default" else "humidity"
+                                friendly = f"{capitalize(zone)} Humidity" if zone != "default" else "Humidity"
+                                homeassistant.post_device_sensor(
+                                    sensor_suffix=suffix,
+                                    state_value=f"{h:.2f}",
+                                    friendly_suffix=friendly,
+                                    unit_of_measurement="%",
+                                    device_class="humidity"
+                                )
+                        if moisture_pct is not None:
                             homeassistant.post_device_sensor(
-                                sensor_suffix=suffix,
-                                state_value=f"{t:.2f}",
-                                friendly_suffix=friendly,
-                                unit_of_measurement="°C",
-                                device_class="temperature"
-                            )
-                        if h is not None:
-                            suffix = f"{zone}_humidity" if zone != "default" else "humidity"
-                            friendly = f"{capitalize(zone)} Humidity" if zone != "default" else "Humidity"
-                            homeassistant.post_device_sensor(
-                                sensor_suffix=suffix,
-                                state_value=f"{h:.2f}",
-                                friendly_suffix=friendly,
+                                sensor_suffix="moisture",
+                                state_value=f"{moisture_pct:.1f}",
+                                friendly_suffix="Soil Moisture",
                                 unit_of_measurement="%",
                                 device_class="humidity"
                             )
-                    if moisture_pct is not None:
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="moisture",
-                            state_value=f"{moisture_pct:.1f}",
-                            friendly_suffix="Soil Moisture",
-                            unit_of_measurement="%",
-                            device_class="humidity"
-                        )
-                    if bat_voltage is not None and bat_percent is not None:
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="battery",
-                            state_value=f"{bat_percent:.1f}",
-                            friendly_suffix="Battery Percentage",
-                            unit_of_measurement="%",
-                            device_class="battery"
-                        )
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="battery_voltage",
-                            state_value=f"{bat_voltage:.2f}",
-                            friendly_suffix="Battery Voltage",
-                            unit_of_measurement="V",
-                            device_class="voltage"
-                        )
-                except Exception as e:
-                    print(f"⚠️ Failed to post to Home Assistant: {e}")
-                finally:
-                    # Cleanly shut down WiFi radio to conserve power only if deep sleep is enabled
-                    if deep_sleep_enabled:
-                        try:
-                            wlan = network.WLAN(network.STA_IF)
-                            wlan.active(False)
-                            print("📶 WiFi interface shut down.")
-                        except Exception as e:
-                            print(f"⚠️ Failed to disable WiFi: {e}")
-                    else:
-                        print("📶 Staying connected (Deep Sleep disabled).")
+                        if bat_voltage is not None and bat_percent is not None:
+                            homeassistant.post_device_sensor(
+                                sensor_suffix="battery",
+                                state_value=f"{bat_percent:.1f}",
+                                friendly_suffix="Battery Percentage",
+                                unit_of_measurement="%",
+                                device_class="battery"
+                            )
+                            homeassistant.post_device_sensor(
+                                sensor_suffix="battery_voltage",
+                                state_value=f"{bat_voltage:.2f}",
+                                friendly_suffix="Battery Voltage",
+                                unit_of_measurement="V",
+                                device_class="voltage"
+                            )
+                        if fan is not None and hasattr(fan, 'speed'):
+                            homeassistant.post_device_sensor(
+                                sensor_suffix="fan_speed",
+                                state_value=f"{int(fan.speed)}",
+                                friendly_suffix="Fan Speed",
+                                unit_of_measurement="%",
+                                device_class=None
+                            )
+                    except Exception as e:
+                        print(f"⚠️ Failed to post to Home Assistant: {e}")
+                    finally:
+                        # Cleanly shut down WiFi radio to conserve power only if deep sleep is enabled
+                        if deep_sleep_enabled:
+                            try:
+                                wlan = network.WLAN(network.STA_IF)
+                                wlan.active(False)
+                                print("📶 WiFi interface shut down.")
+                            except Exception as e:
+                                print(f"⚠️ Failed to disable WiFi: {e}")
+                        else:
+                            print("📶 Staying connected (Deep Sleep disabled).")
+                else:
+                    print("❌ WiFi connection failed. Skipping HA post.")
             else:
-                print("❌ WiFi connection failed. Skipping HA post.")
-        else:
-            print("⚠️ Skipping WiFi connection and HA post due to lack of sensor readings.")
+                print("⚠️ Skipping WiFi connection and HA post due to lack of sensor readings.")
 
-        # --- 3. Sleep / Deep Sleep Cycle ---
+        # --- 4. Sleep / Deep Sleep Cycle ---
         if deep_sleep_enabled and not usb.is_usb_connected():
             print(f"💤 Entering Deep Sleep for {sleep_seconds} seconds...")
             time.sleep_ms(100) # Let print buffers clear
             machine.deepsleep(sleep_seconds * 1000)
         else:
-            print(f"🔌 Staying awake. Sleeping {sleep_seconds} seconds before next reading...")
-            # Cooperative sleep using small steps so the board responds to interrupts
-            for _ in range(int(sleep_seconds * 10)):
-                time.sleep_ms(100)
-            print("\n🔄 Starting next measurement cycle...")
+            # Short cooperative sleep for the fast control loop
+            time.sleep(1)
