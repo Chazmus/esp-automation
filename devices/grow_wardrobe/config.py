@@ -57,7 +57,19 @@ PWM_FAN = {
     "deadband": 0.05             # VPD error deadband in kPa
 }
 
+IRRIGATION_CONFIG = {
+    "drip_pin": 2,
+    "waste_pin": 3,
+    "agitate_pin": 4,
+    "cycle_hours": 4,
+    "agitate_mins": 5,
+    "irrig_secs": 15,
+    "drain_wait_mins": 10,
+    "drain_secs": 60
+}
+
 LIGHT_RELAY = {
     "pin": 20
 }
 
+MQTT_BASE_TOPIC = "wardrobe"
