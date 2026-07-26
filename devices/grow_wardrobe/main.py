@@ -166,8 +166,8 @@ if wifi.connect():
                         print(log)
                     pub(client, "ventilation/fan/state", int(fan.speed))
                     
-                # Post telemetry every 60 seconds
-                if time.ticks_diff(current_time, last_ha_post) > 60000:
+                # Post telemetry every 10 seconds
+                if time.ticks_diff(current_time, last_ha_post) > 10000:
                     last_ha_post = current_time
                     print("📡 Posting sensor telemetry to Home Assistant...")
                     try:
