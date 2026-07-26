@@ -174,11 +174,11 @@ if wifi.connect():
                         for zone, (t, h) in readings.items():
                             if t is not None:
                                 suffix = f"{zone}_temp" if zone != "default" else "temp"
-                                friendly = f"{zone.capitalize()} Temperature" if zone != "default" else "Temperature"
+                                friendly = f"{zone[0].upper() + zone[1:]} Temperature" if zone != "default" else "Temperature"
                                 homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{t:.2f}", friendly_suffix=friendly, unit_of_measurement="°C", device_class="temperature")
                             if h is not None:
                                 suffix = f"{zone}_humidity" if zone != "default" else "humidity"
-                                friendly = f"{zone.capitalize()} Humidity" if zone != "default" else "Humidity"
+                                friendly = f"{zone[0].upper() + zone[1:]} Humidity" if zone != "default" else "Humidity"
                                 homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{h:.2f}", friendly_suffix=friendly, unit_of_measurement="%", device_class="humidity")
                                 
                             if t is not None and h is not None:

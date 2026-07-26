@@ -100,6 +100,7 @@ def run(config):
                 print(f"Reading Temperature/Humidity Sensor ({zone})...")
             t, h = sensor.read()
             if t is not None:
+                alpha = 0.2
                 if zone in filtered_temps and filtered_temps[zone] is not None:
                     t_filt = alpha * t + (1 - alpha) * filtered_temps[zone]
                 else:
