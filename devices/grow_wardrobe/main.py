@@ -38,6 +38,15 @@ temp_sensors = {}
 if hasattr(config, "TEMP_HUMIDITY_SENSORS"):
     for zone, cfg in config.TEMP_HUMIDITY_SENSORS.items():
         temp_sensors[zone] = TempHumiditySensor(sda_pin=cfg["sda"], scl_pin=cfg["scl"], sensor_type=cfg.get("type", "AHT20"))
+        
+soil_sensor = None
+if hasattr(config, "SOIL_MOISTURE_SENSOR"):
+    from lib.drivers.soil_moisture import SoilMoistureSensor
+    cfg = config.SOIL_MOISTURE_SENSOR
+    soil_sensor = SoilMoistureSensor(adc_pin=cfg["adc_pin"], power_pin=cfg.get("power_pin"), dry_value=cfg.get("dry", 3800), wet_value=cfg.get("wet", 1275), num_samples=cfg.get("num_samples", 5))
+
+import battery
+import homeassistant
 
 # --- 3. MQTT Configuration ---
 MQTT_BROKER = getattr(secrets, 'MQTT_BROKER', secrets.HA_URL.replace("http://", "").split(":")[0])
@@ -144,10 +153,28 @@ if wifi.connect():
                 # Post telemetry every 60 seconds
                 if time.ticks_diff(current_time, last_ha_post) > 60000:
                     last_ha_post = current_time
-                    for zone, (t, h) in readings.items():
-                        if t is not None:
-                            pub(client, f"sensors/{zone}/temp", f"{t:.2f}")
-                            pub(client, f"sensors/{zone}/humidity", f"{h:.2f}")
+                    print("📡 Posting sensor telemetry to Home Assistant...")
+                    try:
+                        for zone, (t, h) in readings.items():
+                            if t is not None:
+                                suffix = f"{zone}_temp" if zone != "default" else "temp"
+                                friendly = f"{zone.capitalize()} Temperature" if zone != "default" else "Temperature"
+                                homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{t:.2f}", friendly_suffix=friendly, unit_of_measurement="°C", device_class="temperature")
+                            if h is not None:
+                                suffix = f"{zone}_humidity" if zone != "default" else "humidity"
+                                friendly = f"{zone.capitalize()} Humidity" if zone != "default" else "Humidity"
+                                homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{h:.2f}", friendly_suffix=friendly, unit_of_measurement="%", device_class="humidity")
+                                
+                        if soil_sensor is not None:
+                            raw, pct = soil_sensor.read()
+                            if pct is not None:
+                                homeassistant.post_device_sensor(sensor_suffix="moisture", state_value=f"{pct:.1f}", friendly_suffix="Soil Moisture", unit_of_measurement="%", device_class="humidity")
+                                
+                        if fan is not None:
+                            homeassistant.post_device_sensor(sensor_suffix="fan_speed", state_value=f"{int(fan.speed)}", friendly_suffix="Fan Speed", unit_of_measurement="%", device_class=None)
+                            
+                    except Exception as e:
+                        print(f"⚠️ Failed to post to Home Assistant: {e}")
             
             # 3. Irrigation State Machine
             if irrig_mode == "AUTO":
