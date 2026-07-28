@@ -27,7 +27,6 @@ fan = PWMFan(pin=config.PWM_FAN["pin"], freq=config.PWM_FAN.get("freq", 25000))
 drip_relay = Relay(pin=config.IRRIGATION_CONFIG["drip_pin"], active_high=False)
 agitate_relay = Relay(pin=config.IRRIGATION_CONFIG["agitate_pin"], active_high=False)
 waste_relay = Relay(pin=config.IRRIGATION_CONFIG["waste_pin"], active_high=False)
-light_relay = Relay(pin=config.LIGHT_RELAY["pin"], active_high=False)
 
 # Controllers
 vpd_controller = VPDController(fan, config.PWM_FAN)
@@ -99,10 +98,7 @@ def mqtt_callback(topic, msg):
         waste_relay.on() if msg == "ON" else waste_relay.off()
         pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
         
-    # -- Light Control --
-    elif topic.endswith("light/set"):
-        light_relay.on() if msg == "ON" else light_relay.off()
-        pub(client, "light/state", "ON" if light_relay.is_on() else "OFF")
+
 
 # --- 4. Network Setup ---
 print("Connecting to WiFi...")
@@ -121,7 +117,6 @@ if wifi.connect():
         # Publish initial states
         pub(client, "ventilation/mode/state", vent_mode)
         pub(client, "irrigation/mode/state", irrig_mode)
-        pub(client, "light/state", "OFF")
         
         last_sensor_read = 0
         last_ha_post = 0
@@ -190,7 +185,6 @@ if wifi.connect():
     except KeyboardInterrupt:
         print("\nExiting. Ensuring safe state...")
         irrig_controller.force_idle()
-        light_relay.off()
         client.disconnect()
     except Exception as e:
         print(f"❌ Crash: {e}")

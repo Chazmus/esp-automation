@@ -27,7 +27,7 @@ graph TD
         Pump_Irrig[12V Irrigation Pump]
         Pump_Drain[12V Runoff Pump]
         Pump_Agit[12V Agitation Pump]
-        Relay_Spare[Spare Relay / Grow LED]
+        Relay_Spare[Spare Relay]
     end
 
     %% Water Buckets
@@ -93,7 +93,7 @@ To run all items from a single **12V power supply**, the power distribution and 
 | **GPIO 2** | Digital Out | Relay Channel 1 IN (Irrigation) | Switches 12V irrigation pump |
 | **GPIO 3** | Digital Out | Relay Channel 2 IN (Runoff) | Switches 12V runoff vacuum pump |
 | **GPIO 4** | Digital Out | Relay Channel 3 IN (Agitation) | Switches 12V agitation pump |
-| **GPIO 20**| Digital Out | Relay Channel 4 IN (Spare/LED) | Switches grow light or general spare channel |
+| **GPIO 20**| Digital Out | Relay Channel 4 IN (Spare) | General spare relay channel |
 | **GPIO 5** | I2C SDA (SoftI2C 1)| Canopy Temp/Humidity Sensor | Canopy environment readings |
 | **GPIO 6** | I2C SCL (SoftI2C 1)| Canopy Temp/Humidity Sensor | Canopy environment readings |
 | **GPIO 7** | I2C SDA (SoftI2C 2)| Pot-Level Temp/Humidity Sensor| Lower canopy environment readings |
@@ -116,9 +116,9 @@ The fan speed is modulated using a 25 kHz PWM signal. The duty cycle is dynamica
 *   **Ambient Intake Sensor**: Feedforward input. If the room housing the wardrobe is hot/humid, raising fan speed may be counterproductive. The controller uses the ambient readings to determine the theoretical minimum temperature/humidity achievable by venting and adjusts accordingly.
 *   *Algorithm*: (TBD) Will likely be a proportional-integral (PI) control loop or a lookup table evaluating the differential: $\Delta T = T_{\text{Canopy}} - T_{\text{Ambient}}$.
 
-### 2. LED Light Schedule (Optional)
-*   **Control**: Relay switched on a strict time duration (e.g., 18/6 light cycle for vegetative stage, 12/12 for flowering).
-*   **Status**: Low priority. The ESP32-C3 can manage this via an internal real-time clock (syncing time via NTP on boot) or a home automation script, but a mechanical/smart plug timer can serve as a physical backup.
+### 2. Grow Light Schedule (Smart Plug)
+*   **Control**: The grow light is controlled via an external smart plug (e.g., Zigbee/Tasmota/Shelly smart plug) inside Home Assistant. This avoids the danger of switching 240V AC mains voltage via the controller's onboard mechanical relays.
+*   **Status**: Active. The smart plug operates on a strict schedule managed by Home Assistant (e.g., 18/6 light cycle for vegetative stage, 12/12 for flowering). In the future, the ESP32-C3 might read from or interact with the smart plug's state via Home Assistant's API or MQTT.
 
 ### 3. Irrigation System (Fresh Reservoir)
 *   **Agitation Pump**: Runs on a scheduled timer (e.g., 2 minutes every hour, or for 5 minutes immediately prior to an irrigation event) to prevent concentrated liquid nutrients from settling out of suspension while avoiding heating the water.

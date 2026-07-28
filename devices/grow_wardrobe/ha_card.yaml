@@ -144,9 +144,9 @@ elements:
       text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
 
   # ==================== 6. GROW LIGHT ====================
-  # Grow Light Toggle (Over sparkle icon)
+  # Grow Light Toggle (Over sparkle icon) - Controls the external Smart Plug
   - type: state-icon
-    entity: switch.esp32_growdrobe_light
+    entity: switch.grow_light_smart_plug
     tap_action:
       action: toggle
     style:

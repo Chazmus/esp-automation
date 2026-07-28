@@ -24,7 +24,7 @@ The screen acts as a physical control panel and live telemetry dashboard. It ope
    * `sensor.esp32_grow_wardrobe_temp`
    * `sensor.esp32_grow_wardrobe_humidity`
    * `sensor.esp32_grow_wardrobe_moisture`
-   * `switch.grow_wardrobe_light`
+   * `switch.grow_light_smart_plug` (External Smart Plug)
    * `fan.grow_wardrobe_fan`
 3. **Touchscreen Dashboard (ESPHome)** connects to Home Assistant, imports the wardrobe's sensor values to display them, and sends service calls (like light toggle or fan speed adjustments) back to Home Assistant when the screen is touched.
 
@@ -174,7 +174,7 @@ sensor:
 binary_sensor:
   - platform: homeassistant
     id: ha_light_switch
-    entity_id: switch.grow_wardrobe_light
+    entity_id: switch.grow_light_smart_plug
 
 # 6. Action handlers sending commands back to Home Assistant
 script:
@@ -192,7 +192,7 @@ script:
       - homeassistant.service:
           service: homeassistant.toggle
           data:
-            entity_id: switch.grow_wardrobe_light
+            entity_id: switch.grow_light_smart_plug
 
 # Fonts and Colors for rendering
 font:

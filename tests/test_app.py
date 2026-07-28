@@ -72,6 +72,8 @@ class TestApp:
         usb_mock.is_usb_connected.return_value = False
         battery_mock.read_voltage.return_value = 3.8
         battery_mock.get_percentage.return_value = 60.0
+        time_mock.ticks_ms.return_value = 1000
+        time_mock.ticks_diff.return_value = 100000
 
     def teardown_method(self):
         # Restore original sys.modules keys
@@ -268,11 +270,12 @@ class TestApp:
         class LoopComplete(BaseException):
             pass
         
-        def sleep_ms_side_effect(ms):
+        def sleep_side_effect(*args, **kwargs):
             if wifi_mock.connect.called:
                 raise LoopComplete()
         
-        time_mock.sleep_ms.side_effect = sleep_ms_side_effect
+        time_mock.sleep.side_effect = sleep_side_effect
+        time_mock.sleep_ms.side_effect = sleep_side_effect
 
         from lib.app import run
         with pytest.raises(LoopComplete):
@@ -287,9 +290,7 @@ class TestApp:
             device_class="humidity"
         )
 
-    @patch('time.sleep')
-    @patch('time.sleep_ms')
-    def test_run_always_on_loop_with_actuators(self, mock_sleep_ms, mock_sleep):
+    def test_run_always_on_loop_with_actuators(self):
         # Simulates a continuous loop device with actuators configured
         class MockConfig:
             DEVICE_NAME = "test_grow_wardrobe"
@@ -301,42 +302,29 @@ class TestApp:
                 "type": "AHT20"
             }
             SOIL_MOISTURE_SENSOR = None
-            PWM_FAN = {
-                "pin": 12,
-                "freq": 25000,
-                "target_temp": 28.0
-            }
-            LIGHT_RELAY = {
-                "pin": 13
-            }
 
         # Mock TempHumiditySensor reading
         sensor_instance = MagicMock()
-        sensor_instance.temperature = 30.5  # Temp > 28.0 (should set fan to 100%)
+        sensor_instance.temperature = 30.5
         sensor_instance.relative_humidity = 50.0
         ahtx0_mock.AHT20.return_value = sensor_instance
 
-        # Pin and PWM mock setup
+        # Pin mock setup
         machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
-        pwm_instance = MagicMock()
-        machine_mock.PWM.return_value = pwm_instance
 
         class LoopComplete(BaseException):
             pass
         
-        def sleep_ms_side_effect(ms):
+        def sleep_side_effect(*args, **kwargs):
             if wifi_mock.connect.called:
                 raise LoopComplete()
         
-        time_mock.sleep_ms.side_effect = sleep_ms_side_effect
+        time_mock.sleep.side_effect = sleep_side_effect
+        time_mock.sleep_ms.side_effect = sleep_side_effect
 
         from lib.app import run
         with pytest.raises(LoopComplete):
             run(MockConfig)
-
-        # Verify fan speed was set to 100% (temperature high: 30.5)
-        # MicroPython PWM duty is 10-bit: 100% -> 1023
-        pwm_instance.duty.assert_called_with(1023)
 
         # Verify HA post of temperature
         homeassistant_mock.post_device_sensor.assert_any_call(
@@ -347,168 +335,74 @@ class TestApp:
             device_class="temperature"
         )
 
-    @patch('time.sleep')
-    @patch('time.sleep_ms')
-    def test_run_advanced_vpd_control_normal(self, mock_sleep_ms, mock_sleep):
-        class MockConfig:
-            DEVICE_NAME = "test_grow_wardrobe"
-            DEEP_SLEEP_ENABLED = False
-            SLEEP_SECONDS = 10
-            TEMP_HUMIDITY_SENSORS = {
-                "canopy": {"sda": 5, "scl": 6, "type": "AHT20"},
-                "ambient": {"sda": 9, "scl": 10, "type": "AHT20"}
-            }
-            SOIL_MOISTURE_SENSOR = None
-            PWM_FAN = {
-                "pin": 12,
-                "freq": 25000,
-                "target_vpd": 1.2,
-                "kp": 45.0,
-                "ki": 0.02,
-                "min_speed": 30,
-                "max_speed": 100,
-                "max_safe_temp": 30.0,
-                "min_safe_temp": 16.0,
-                "max_safe_humidity": 65.0,
-                "leaf_temp_offset": 2.0,
-                "ema_alpha": 1.0,  # disable smoothing
-                "deadband": 0.05
-            }
-            LIGHT_RELAY = None
+    def test_run_advanced_vpd_control_normal(self):
+        from lib.controllers.vpd import VPDController
+        
+        fan_mock = MagicMock()
+        config = {
+            "target_vpd": 1.2,
+            "kp": 45.0,
+            "ki": 0.02,
+            "min_speed": 30,
+            "max_speed": 100,
+            "max_safe_temp": 30.0,
+            "min_safe_temp": 16.0,
+            "max_safe_humidity": 65.0,
+            "leaf_temp_offset": 2.0,
+            "deadband": 0.05
+        }
+        controller = VPDController(fan_mock, config)
+        
+        # Canopy: 25C, 40% humidity (high VPD, should clamp to min)
+        controller.evaluate(
+            canopy_temp=25.0,
+            canopy_humidity=40.0,
+            ambient_temp=20.0,
+            ambient_humidity=50.0
+        )
+        
+        fan_mock.set_speed.assert_called_with(30)
 
-        # Setup side effect to return 25C and 40% humidity (high VPD, should clamp to min)
-        canopy_sensor = MagicMock()
-        canopy_sensor.temperature = 25.0
-        canopy_sensor.relative_humidity = 40.0
+    def test_run_advanced_vpd_control_temp_override(self):
+        from lib.controllers.vpd import VPDController
+        
+        fan_mock = MagicMock()
+        config = {
+            "target_vpd": 1.2,
+            "max_safe_temp": 30.0,
+            "min_safe_temp": 16.0,
+            "max_safe_humidity": 65.0,
+        }
+        controller = VPDController(fan_mock, config)
+        
+        # Canopy temp > max_safe_temp
+        controller.evaluate(canopy_temp=31.0, canopy_humidity=50.0)
+        
+        fan_mock.set_speed.assert_called_with(100)
 
-        ambient_sensor = MagicMock()
-        ambient_sensor.temperature = 20.0
-        ambient_sensor.relative_humidity = 50.0
-
-        ahtx0_mock.AHT20.side_effect = [canopy_sensor, ambient_sensor]
-        machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
-        pwm_instance = MagicMock()
-        machine_mock.PWM.return_value = pwm_instance
-
-        class LoopComplete(BaseException):
-            pass
-
-        time_mock.sleep_ms.side_effect = lambda ms: None
-        wifi_mock.connect.side_effect = LoopComplete
-
-        from lib.app import run
-        with pytest.raises(LoopComplete):
-            run(MockConfig)
-
-        # High VPD (1.54 kPa) is above target VPD (1.2 kPa), so it's too dry -> fan should clamp to min_speed (30%)
-        # duty = int(30/100 * 1023) = 306
-        pwm_instance.duty.assert_called_with(306)
-
-    @patch('time.sleep')
-    @patch('time.sleep_ms')
-    def test_run_advanced_vpd_control_temp_override(self, mock_sleep_ms, mock_sleep):
-        class MockConfig:
-            DEVICE_NAME = "test_grow_wardrobe"
-            DEEP_SLEEP_ENABLED = False
-            SLEEP_SECONDS = 10
-            TEMP_HUMIDITY_SENSORS = {
-                "canopy": {"sda": 5, "scl": 6, "type": "AHT20"},
-                "ambient": {"sda": 9, "scl": 10, "type": "AHT20"}
-            }
-            SOIL_MOISTURE_SENSOR = None
-            PWM_FAN = {
-                "pin": 12,
-                "freq": 25000,
-                "target_vpd": 1.2,
-                "max_safe_temp": 30.0,
-                "min_safe_temp": 16.0,
-                "max_safe_humidity": 65.0,
-                "ema_alpha": 1.0
-            }
-            LIGHT_RELAY = None
-
-        # Canopy temperature is 31.0 (> max_safe_temp of 30.0)
-        canopy_sensor = MagicMock()
-        canopy_sensor.temperature = 31.0
-        canopy_sensor.relative_humidity = 50.0
-
-        ambient_sensor = MagicMock()
-        ambient_sensor.temperature = 20.0
-        ambient_sensor.relative_humidity = 50.0
-
-        ahtx0_mock.AHT20.side_effect = [canopy_sensor, ambient_sensor]
-        machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
-        pwm_instance = MagicMock()
-        machine_mock.PWM.return_value = pwm_instance
-
-        class LoopComplete(BaseException):
-            pass
-
-        time_mock.sleep_ms.side_effect = lambda ms: None
-        wifi_mock.connect.side_effect = LoopComplete
-
-        from lib.app import run
-        with pytest.raises(LoopComplete):
-            run(MockConfig)
-
-        # High temperature override should trigger 100% fan speed (1023 duty)
-        pwm_instance.duty.assert_called_with(1023)
-
-    @patch('time.sleep')
-    @patch('time.sleep_ms')
-    def test_run_advanced_vpd_control_ambient_clamp(self, mock_sleep_ms, mock_sleep):
-        class MockConfig:
-            DEVICE_NAME = "test_grow_wardrobe"
-            DEEP_SLEEP_ENABLED = False
-            SLEEP_SECONDS = 10
-            TEMP_HUMIDITY_SENSORS = {
-                "canopy": {"sda": 5, "scl": 6, "type": "AHT20"},
-                "ambient": {"sda": 9, "scl": 10, "type": "AHT20"}
-            }
-            SOIL_MOISTURE_SENSOR = None
-            PWM_FAN = {
-                "pin": 12,
-                "freq": 25000,
-                "target_vpd": 1.2,
-                "min_speed": 30,
-                "max_speed": 100,
-                "max_safe_temp": 35.0,
-                "min_safe_temp": 16.0,
-                "max_safe_humidity": 95.0,
-                "leaf_temp_offset": 2.0,
-                "ema_alpha": 1.0,
-                "deadband": 0.05
-            }
-            LIGHT_RELAY = None
-
-        # Canopy: 24C, 80% humidity (low VPD, i.e. too humid)
-        # SVP leaf (22C) = 2.644 kPa. SVP air (24C) = 2.985 kPa.
-        # AVP air = 2.985 * 0.80 = 2.388 kPa.
-        # VPD = 2.644 - 2.388 = 0.256 kPa (much lower than target 1.2, error > 0).
-        canopy_sensor = MagicMock()
-        canopy_sensor.temperature = 24.0
-        canopy_sensor.relative_humidity = 80.0
-
-        # Ambient: 24C, 90% humidity (wetter than canopy!)
-        # AVP ambient = 2.985 * 0.90 = 2.686 kPa (which is >= AVP air 2.388 kPa).
-        ambient_sensor = MagicMock()
-        ambient_sensor.temperature = 24.0
-        ambient_sensor.relative_humidity = 90.0
-
-        ahtx0_mock.AHT20.side_effect = [canopy_sensor, ambient_sensor]
-        machine_mock.Pin.side_effect = lambda pin, *args, **kwargs: MagicMock()
-        pwm_instance = MagicMock()
-        machine_mock.PWM.return_value = pwm_instance
-
-        class LoopComplete(BaseException):
-            pass
-
-        time_mock.sleep_ms.side_effect = lambda ms: None
-        wifi_mock.connect.side_effect = LoopComplete
-
-        from lib.app import run
-        with pytest.raises(LoopComplete):
-            run(MockConfig)
-
-        # Ambient check should clamp speed to min_speed (30%) because ambient is wetter
-        pwm_instance.duty.assert_called_with(306)
+    def test_run_advanced_vpd_control_ambient_clamp(self):
+        from lib.controllers.vpd import VPDController
+        
+        fan_mock = MagicMock()
+        config = {
+            "target_vpd": 1.2,
+            "min_speed": 30,
+            "max_speed": 100,
+            "max_safe_temp": 35.0,
+            "min_safe_temp": 16.0,
+            "max_safe_humidity": 95.0,
+            "leaf_temp_offset": 2.0,
+            "deadband": 0.05
+        }
+        controller = VPDController(fan_mock, config)
+        
+        # Canopy: 24C, 80% humidity (low VPD)
+        # Ambient: 24C, 90% humidity (wetter than canopy)
+        controller.evaluate(
+            canopy_temp=24.0,
+            canopy_humidity=80.0,
+            ambient_temp=24.0,
+            ambient_humidity=90.0
+        )
+        
+        fan_mock.set_speed.assert_called_with(30)

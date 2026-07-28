@@ -66,7 +66,7 @@ graph TD
         Pump1["Irrigation Pump"]
         Pump2["Runoff Pump"]
         Pump3["Agitation Pump"]
-        Light["Grow LED / Spare"]
+        Spare["Spare Relay Channel"]
     end
 
     %% Flyback Diodes
@@ -120,7 +120,7 @@ graph TD
     IN1 -.-> Pump1
     IN2 -.-> Pump2
     IN3 -.-> Pump3
-    IN4 -.-> Light
+    IN4 -.-> Spare
 
     %% Diode placement
     Pump1 --- D1
@@ -129,7 +129,7 @@ graph TD
 
     class PSU_12V,Buck,VIN,V33,R_VCC,JD_VCC psu;
     class Canopy,Pot,Ambient,Moisture sensor;
-    class Fan,Pump1,Pump2,Pump3,Light actuator;
+    class Fan,Pump1,Pump2,Pump3,Spare actuator;
     class D1,D2,D3 logic;
     class GND,R_GND ground;
 ```
@@ -147,7 +147,7 @@ graph TD
 | **GPIO 2** | Digital Output | Relay Channel 1 IN | Switches 12V Irrigation Pump |
 | **GPIO 3** | Digital Output | Relay Channel 2 IN | Switches 12V Runoff Pump |
 | **GPIO 4** | Digital Output | Relay Channel 3 IN | Switches 12V Agitation Pump |
-| **GPIO 13** | Digital Output | Relay Channel 4 IN | Switches 12V Grow Light (or Spare) |
+| **GPIO 13** | Digital Output | Relay Channel 4 IN | General Spare Relay Channel |
 | **GPIO 1** | PWM Output | Noctua PWM Fan Speed pin | Controls variable speed ventilation |
 | **GPIO 5** | SoftI2C SDA 1 | Canopy AHT20 SDA | Temperature/Humidity (Canopy) |
 | **GPIO 6** | SoftI2C SCL 1 | Canopy AHT20 SCL | Temperature/Humidity (Canopy) |

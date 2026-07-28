@@ -118,9 +118,6 @@ PWM_FAN = {
     "freq": 25000,
     "target_temp": 28.0
 }
-LIGHT_RELAY = {
-    "pin": 13
-}
 ```
 
 ---

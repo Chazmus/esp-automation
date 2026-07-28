@@ -68,8 +68,4 @@ IRRIGATION_CONFIG = {
     "drain_secs": 60
 }
 
-LIGHT_RELAY = {
-    "pin": 20
-}
-
 MQTT_BASE_TOPIC = "wardrobe"
