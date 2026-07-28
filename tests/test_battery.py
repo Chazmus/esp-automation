@@ -47,7 +47,7 @@ class TestBattery:
         assert get_percentage(-math.inf) == 0.0
 
     def test_get_percentage_string(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="voltage must be an int or float"):
             get_percentage("4.2")
 
     def test_read_voltage_disconnected(self):
