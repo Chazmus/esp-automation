@@ -62,6 +62,8 @@ def get_percentage(voltage):
     """
     if voltage is None:
         return None
+    if not isinstance(voltage, (int, float)):
+        raise TypeError("voltage must be an int or float")
     # Li-Ion discharge curve is non-linear, but a linear approximation between 3.2V and 4.2V is standard
     percentage = ((voltage - 3.2) / (4.2 - 3.2)) * 100
     return max(0.0, min(100.0, percentage))
