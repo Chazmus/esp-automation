@@ -161,3 +161,39 @@ def test_evaluate_integral_windup():
         
     # Max integral term clamp is max_speed - min_speed = 70.0
     assert controller.integral_error == 70.0
+
+def test_vpd_controller_dry_mode():
+    fan = MagicMock()
+    config = {
+        "target_vpd": 1.2,
+        "leaf_temp_offset": 2.0,
+        "min_speed": 30,
+        "dry_target_vpd": 0.9,
+        "dry_leaf_temp_offset": 0.0,
+        "dry_min_speed": 20,
+        "dry_max_safe_humidity": 65.0
+    }
+    controller = VPDController(fan, config)
+    assert controller.mode == "GROW"
+    assert controller.target_vpd == 1.2
+    assert controller.leaf_offset == 2.0
+    assert controller.min_speed == 30
+    
+    controller.set_mode("DRY")
+    assert controller.mode == "DRY"
+    assert controller.target_vpd == 0.9
+    assert controller.leaf_offset == 0.0
+    assert controller.min_speed == 20
+    assert controller.active_max_safe_humidity == 65.0
+    
+    # Humidity > 65% in DRY mode triggers override
+    res = controller.evaluate(canopy_temp=20.0, canopy_humidity=68.0)
+    assert "OVERRIDE (DRY)" in res
+    fan.set_speed.assert_called_with(100)
+
+    # Switch back to GROW
+    controller.set_mode("GROW")
+    assert controller.mode == "GROW"
+    assert controller.target_vpd == 1.2
+    assert controller.min_speed == 30
+

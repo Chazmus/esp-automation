@@ -9,15 +9,16 @@ from umqtt.simple import MQTTClient
 from lib.drivers.relay import Relay
 from lib.drivers.fan import PWMFan
 from lib.drivers.temp_humidity import TempHumiditySensor
-from lib.controllers.vpd import VPDController
+from lib.controllers.vpd import VPDController, calculate_vpd
 from lib.controllers.irrigation import IrrigationController
+
 
 print("\n========================================")
 print(f"ESP32-C3 Node: {config.DEVICE_NAME} (MQTT HOA Edition)")
 print("========================================\n")
 
 # --- 1. State Tracking ---
-vent_mode = "AUTO"
+vent_mode = "GROW"
 irrig_mode = "AUTO"
 
 # --- 2. Hardware Initialization ---
@@ -30,6 +31,7 @@ waste_relay = Relay(pin=config.IRRIGATION_CONFIG["waste_pin"], active_high=False
 
 # Controllers
 vpd_controller = VPDController(fan, config.PWM_FAN)
+vpd_controller.set_mode(vent_mode)
 irrig_controller = IrrigationController(drip_relay, agitate_relay, waste_relay, config.IRRIGATION_CONFIG)
 
 # Sensors
@@ -65,10 +67,25 @@ def mqtt_callback(topic, msg):
     
     # -- Ventilation Controls --
     if topic.endswith("ventilation/mode/set"):
-        vent_mode = msg
+        raw_mode = msg.upper()
+        if raw_mode in ("AUTO", "GROW"):
+            vent_mode = "GROW"
+        elif raw_mode == "DRY":
+            vent_mode = "DRY"
+            # Lockout irrigation in DRY mode
+            irrig_mode = "MANUAL"
+            irrig_controller.force_idle()
+            pub(client, "irrigation/mode/state", "MANUAL")
+            pub(client, "irrigation/drip/state", "OFF")
+            pub(client, "irrigation/agitate/state", "OFF")
+            pub(client, "irrigation/waste/state", "OFF")
+            print("Switched Ventilation to DRY. Irrigation locked out & pumps stopped.")
+        elif raw_mode == "MANUAL":
+            vent_mode = "MANUAL"
+
+        vpd_controller.set_mode(vent_mode)
         pub(client, "ventilation/mode/state", vent_mode)
-        if vent_mode == "MANUAL":
-            print("Switched Ventilation to MANUAL. Waiting for fan speed commands.")
+        print(f"Switched Ventilation mode to {vent_mode}")
             
     elif topic.endswith("ventilation/fan/set"):
         if vent_mode == "MANUAL":
@@ -77,14 +94,18 @@ def mqtt_callback(topic, msg):
             
     # -- Irrigation Controls --
     elif topic.endswith("irrigation/mode/set"):
-        irrig_mode = msg
-        pub(client, "irrigation/mode/state", irrig_mode)
-        if irrig_mode == "MANUAL":
-            irrig_controller.force_idle()
-            print("Switched Irrigation to MANUAL. All pumps stopped.")
-            pub(client, "irrigation/drip/state", "OFF")
-            pub(client, "irrigation/agitate/state", "OFF")
-            pub(client, "irrigation/waste/state", "OFF")
+        if vent_mode == "DRY" and msg.upper() == "AUTO":
+            print("⚠️ Cannot set Irrigation to AUTO while in DRY mode.")
+            pub(client, "irrigation/mode/state", "MANUAL")
+        else:
+            irrig_mode = msg.upper()
+            pub(client, "irrigation/mode/state", irrig_mode)
+            if irrig_mode == "MANUAL":
+                irrig_controller.force_idle()
+                print("Switched Irrigation to MANUAL. All pumps stopped.")
+                pub(client, "irrigation/drip/state", "OFF")
+                pub(client, "irrigation/agitate/state", "OFF")
+                pub(client, "irrigation/waste/state", "OFF")
             
     elif topic.endswith("irrigation/drip/set") and irrig_mode == "MANUAL":
         drip_relay.on() if msg == "ON" else drip_relay.off()
@@ -139,7 +160,7 @@ if wifi.connect():
                 canopy_t, canopy_h = readings.get("canopy", (None, None))
                 ambient_t, ambient_h = readings.get("ambient", (None, None))
                 
-                if vent_mode == "AUTO":
+                if vent_mode in ("GROW", "DRY", "AUTO"):
                     log = vpd_controller.evaluate(canopy_t, canopy_h, ambient_t, ambient_h, dt_seconds=5.0)
                     if log:
                         print(log)
@@ -160,6 +181,15 @@ if wifi.connect():
                                 friendly = f"{zone.capitalize()} Humidity" if zone != "default" else "Humidity"
                                 homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{h:.2f}", friendly_suffix=friendly, unit_of_measurement="%", device_class="humidity")
                                 
+                            if t is not None and h is not None:
+                                offset = vpd_controller.leaf_offset if zone in ("canopy", "pot") else 0.0
+                                vpd_val = calculate_vpd(t, h, leaf_offset=offset)
+                                if vpd_val is not None:
+                                    suffix = f"{zone}_vpd" if zone != "default" else "vpd"
+                                    friendly = f"{zone.capitalize()} VPD" if zone != "default" else "VPD"
+                                    homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{vpd_val:.2f}", friendly_suffix=friendly, unit_of_measurement="kPa", device_class=None)
+
+                                
                         if soil_sensor is not None:
                             raw, pct = soil_sensor.read()
                             if pct is not None:
@@ -167,12 +197,15 @@ if wifi.connect():
                                 
                         if fan is not None:
                             homeassistant.post_device_sensor(sensor_suffix="fan_speed", state_value=f"{int(fan.speed)}", friendly_suffix="Fan Speed", unit_of_measurement="%", device_class=None)
+
+                        if hasattr(vpd_controller, 'last_vpd') and vpd_controller.last_vpd is not None:
+                            homeassistant.post_device_sensor(sensor_suffix="vpd", state_value=f"{vpd_controller.last_vpd:.2f}", friendly_suffix="VPD", unit_of_measurement="kPa", device_class=None)
                             
                     except Exception as e:
                         print(f"⚠️ Failed to post to Home Assistant: {e}")
             
             # 3. Irrigation State Machine
-            if irrig_mode == "AUTO":
+            if irrig_mode == "AUTO" and vent_mode != "DRY":
                 log = irrig_controller.evaluate()
                 if log:
                     print(log)
