@@ -4,6 +4,7 @@ import math
 import battery
 import wifi
 import homeassistant
+import secrets
 import usb
 import network
 
@@ -159,63 +160,97 @@ def run(config):
                 print("Connecting to WiFi...")
                 if wifi.connect():
                     try:
-                        # Post system alert status sensor
-                        homeassistant.post_device_sensor(
-                            sensor_suffix="status",
-                            state_value=status_str,
-                            friendly_suffix="Status",
-                            extra_attributes={
+                        # Check if Webhook reporting is configured or enabled
+                        use_webhook = getattr(config, "USE_WEBHOOK", False)
+                        if hasattr(homeassistant, "is_webhook_enabled"):
+                            res = homeassistant.is_webhook_enabled()
+                            if res is True or (isinstance(res, str) and len(res) > 0):
+                                use_webhook = True
+
+                        if use_webhook:
+                            # Build a single consolidated payload for fast, battery-efficient posting
+                            payload = {
+                                "device_name": getattr(secrets, "DEVICE_NAME", "esp32"),
+                                "status": status_str,
                                 "severity": severity,
-                                "alert_count": len(active_alerts),
                                 "active_alerts": active_alerts
                             }
-                        )
-                        
-                        for zone, values in readings.items():
-                            t, h = values
-                            if t is not None:
-                                suffix = f"{zone}_temp" if zone != "default" else "temp"
-                                friendly = f"{capitalize(zone)} Temperature" if zone != "default" else "Temperature"
+
+                            for zone, values in readings.items():
+                                t, h = values
+                                if t is not None:
+                                    key_t = f"{zone}_temp" if zone != "default" else "temp"
+                                    payload[key_t] = round(t, 2)
+                                if h is not None:
+                                    key_h = f"{zone}_humidity" if zone != "default" else "humidity"
+                                    payload[key_h] = round(h, 2)
+
+                            if moisture_pct is not None:
+                                payload["soil_moisture"] = round(moisture_pct, 1)
+
+                            if bat_voltage is not None and bat_percent is not None:
+                                payload["battery_percent"] = round(bat_percent, 1)
+                                payload["battery_voltage"] = round(bat_voltage, 2)
+
+                            homeassistant.post_webhook(payload)
+                        else:
+                            # Fallback: Post individual sensors to REST API (local network)
+                            homeassistant.post_device_sensor(
+                                sensor_suffix="status",
+                                state_value=status_str,
+                                friendly_suffix="Status",
+                                extra_attributes={
+                                    "severity": severity,
+                                    "alert_count": len(active_alerts),
+                                    "active_alerts": active_alerts
+                                }
+                            )
+                            
+                            for zone, values in readings.items():
+                                t, h = values
+                                if t is not None:
+                                    suffix = f"{zone}_temp" if zone != "default" else "temp"
+                                    friendly = f"{capitalize(zone)} Temperature" if zone != "default" else "Temperature"
+                                    homeassistant.post_device_sensor(
+                                        sensor_suffix=suffix,
+                                        state_value=f"{t:.2f}",
+                                        friendly_suffix=friendly,
+                                        unit_of_measurement="°C",
+                                        device_class="temperature"
+                                    )
+                                if h is not None:
+                                    suffix = f"{zone}_humidity" if zone != "default" else "humidity"
+                                    friendly = f"{capitalize(zone)} Humidity" if zone != "default" else "Humidity"
+                                    homeassistant.post_device_sensor(
+                                        sensor_suffix=suffix,
+                                        state_value=f"{h:.2f}",
+                                        friendly_suffix=friendly,
+                                        unit_of_measurement="%",
+                                        device_class="humidity"
+                                    )
+                            if moisture_pct is not None:
                                 homeassistant.post_device_sensor(
-                                    sensor_suffix=suffix,
-                                    state_value=f"{t:.2f}",
-                                    friendly_suffix=friendly,
-                                    unit_of_measurement="°C",
-                                    device_class="temperature"
-                                )
-                            if h is not None:
-                                suffix = f"{zone}_humidity" if zone != "default" else "humidity"
-                                friendly = f"{capitalize(zone)} Humidity" if zone != "default" else "Humidity"
-                                homeassistant.post_device_sensor(
-                                    sensor_suffix=suffix,
-                                    state_value=f"{h:.2f}",
-                                    friendly_suffix=friendly,
+                                    sensor_suffix="moisture",
+                                    state_value=f"{moisture_pct:.1f}",
+                                    friendly_suffix="Soil Moisture",
                                     unit_of_measurement="%",
                                     device_class="humidity"
                                 )
-                        if moisture_pct is not None:
-                            homeassistant.post_device_sensor(
-                                sensor_suffix="moisture",
-                                state_value=f"{moisture_pct:.1f}",
-                                friendly_suffix="Soil Moisture",
-                                unit_of_measurement="%",
-                                device_class="humidity"
-                            )
-                        if bat_voltage is not None and bat_percent is not None:
-                            homeassistant.post_device_sensor(
-                                sensor_suffix="battery",
-                                state_value=f"{bat_percent:.1f}",
-                                friendly_suffix="Battery Percentage",
-                                unit_of_measurement="%",
-                                device_class="battery"
-                            )
-                            homeassistant.post_device_sensor(
-                                sensor_suffix="battery_voltage",
-                                state_value=f"{bat_voltage:.2f}",
-                                friendly_suffix="Battery Voltage",
-                                unit_of_measurement="V",
-                                device_class="voltage"
-                            )
+                            if bat_voltage is not None and bat_percent is not None:
+                                homeassistant.post_device_sensor(
+                                    sensor_suffix="battery",
+                                    state_value=f"{bat_percent:.1f}",
+                                    friendly_suffix="Battery Percentage",
+                                    unit_of_measurement="%",
+                                    device_class="battery"
+                                )
+                                homeassistant.post_device_sensor(
+                                    sensor_suffix="battery_voltage",
+                                    state_value=f"{bat_voltage:.2f}",
+                                    friendly_suffix="Battery Voltage",
+                                    unit_of_measurement="V",
+                                    device_class="voltage"
+                                )
 
                     except Exception as e:
                         print(f"⚠️ Failed to post to Home Assistant: {e}")

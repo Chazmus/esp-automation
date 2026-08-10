@@ -87,3 +87,71 @@ def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=N
                 pass
                 
     return success
+
+
+def get_webhook_url():
+    """
+    Determines the Webhook URL from secrets.
+    Returns the URL string if configured, or None.
+    """
+    webhook_url = getattr(secrets, "HA_WEBHOOK_URL", None)
+    if isinstance(webhook_url, str) and webhook_url and webhook_url != "https://your-homeassistant-domain/api/webhook/your-webhook-id":
+        return webhook_url
+
+    webhook_id = getattr(secrets, "HA_WEBHOOK_ID", None)
+    ha_url = getattr(secrets, "HA_URL", None)
+    if isinstance(webhook_id, str) and webhook_id and isinstance(ha_url, str) and ha_url != "http://your-homeassistant-ip:8123":
+        return f"{ha_url.rstrip('/')}/api/webhook/{webhook_id}"
+
+    return None
+
+
+def is_webhook_enabled():
+    """
+    Returns True if a valid Webhook URL or ID is configured in secrets.
+    """
+    url = get_webhook_url()
+    return isinstance(url, str) and len(url) > 0
+
+
+
+def post_webhook(payload):
+    """
+    Posts a single consolidated JSON dictionary payload to Home Assistant's Webhook API.
+    
+    Returns True on success, False on failure.
+    """
+    url = get_webhook_url()
+    if not url:
+        print("⚠️ Home Assistant Webhook URL/ID is not configured in lib/secrets.py.")
+        return False
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    response = None
+    try:
+        data_bytes = json.dumps(payload).encode('utf-8')
+        print(f"Posting consolidated payload to Home Assistant Webhook ({url})...")
+        response = urequests.post(url, headers=headers, data=data_bytes)
+
+        if response.status_code in (200, 201, 202, 204):
+            print("✅ Successfully posted to Home Assistant Webhook!")
+            success = True
+        else:
+            print(f"❌ Failed to post Webhook (HTTP {response.status_code}): {response.text}")
+            success = False
+
+    except Exception as e:
+        print(f"❌ Connection error posting to Home Assistant Webhook: {e}")
+        success = False
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+    return success
+
