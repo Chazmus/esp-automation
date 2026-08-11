@@ -94,6 +94,7 @@ def run(config):
         
         # --- 1. Read Sensors BEFORE WiFi ---
         readings = {}
+        alpha = getattr(getattr(config, "PWM_FAN", {}), "ema_alpha", 0.2)
         for zone, sensor in temp_sensors.items():
             if should_post:
                 print(f"Reading Temperature/Humidity Sensor ({zone})...")

@@ -1,3 +1,6 @@
+def capitalize(s):
+    return s[0].upper() + s[1:] if s else ""
+
 class AlertManager:
     def __init__(self, config):
         self.config = config
@@ -41,23 +44,22 @@ class AlertManager:
         temp_high = cfg.get("temp_high", fan_cfg.get("max_safe_temp", 30.0))
         temp_low = cfg.get("temp_low", fan_cfg.get("min_safe_temp", 16.0))
         
-        t = None
-        if "canopy" in readings:
-            t = readings["canopy"][0]
-        elif "default" in readings:
-            t = readings["default"][0]
-        elif readings:
-            t = list(readings.values())[0][0]
-            
         alerts = []
         severity = "normal"
-        if t is not None:
-            if t > temp_high:
-                alerts.append(f"High Temp ({t:.1f}°C)")
-                severity = "critical"
-            elif t < temp_low:
-                alerts.append(f"Low Temp ({t:.1f}°C)")
-                severity = "critical"
+        sensor_readings = [k for k, v in readings.items() if isinstance(v, (tuple, list))]
+        multi = len(sensor_readings) > 1
+        
+        for zone, values in readings.items():
+            if isinstance(values, (tuple, list)) and len(values) >= 1:
+                t = values[0]
+                if t is not None:
+                    prefix = f"{capitalize(zone)} " if multi and zone not in ("default",) else ""
+                    if t > temp_high:
+                        alerts.append(f"{prefix}High Temp ({t:.1f}°C)")
+                        severity = "critical"
+                    elif t < temp_low:
+                        alerts.append(f"{prefix}Low Temp ({t:.1f}°C)")
+                        severity = "critical"
         return alerts, severity
 
     def _check_humidity_limits(self, readings):
@@ -66,21 +68,21 @@ class AlertManager:
         hum_high = cfg.get("humidity_high", fan_cfg.get("max_safe_humidity", 65.0))
         hum_low = cfg.get("humidity_low", 30.0)
         
-        h = None
-        if "canopy" in readings:
-            h = readings["canopy"][1]
-        elif "default" in readings:
-            h = readings["default"][1]
-        elif readings:
-            h = list(readings.values())[0][1]
-            
         alerts = []
         severity = "normal"
-        if h is not None:
-            if h > hum_high:
-                alerts.append(f"High Humidity ({h:.1f}%)")
-                severity = "critical"
-            elif h < hum_low:
-                alerts.append(f"Low Humidity ({h:.1f}%)")
-                severity = "critical"
+        sensor_readings = [k for k, v in readings.items() if isinstance(v, (tuple, list))]
+        multi = len(sensor_readings) > 1
+        
+        for zone, values in readings.items():
+            if isinstance(values, (tuple, list)) and len(values) >= 2:
+                h = values[1]
+                if h is not None:
+                    prefix = f"{capitalize(zone)} " if multi and zone not in ("default",) else ""
+                    if h > hum_high:
+                        alerts.append(f"{prefix}High Humidity ({h:.1f}%)")
+                        severity = "critical"
+                    elif h < hum_low:
+                        alerts.append(f"{prefix}Low Humidity ({h:.1f}%)")
+                        severity = "critical"
         return alerts, severity
+

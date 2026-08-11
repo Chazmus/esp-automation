@@ -4,14 +4,23 @@ import secrets
 DEVICE_NAME = secrets.DEVICE_NAME
 
 # Execution parameters
-DEEP_SLEEP_ENABLED = True
-SLEEP_SECONDS = 900  # 15 minutes sleep interval
+DEEP_SLEEP_ENABLED = False  # Continuous execution (mains powered)
+SLEEP_SECONDS = 30         # 30 seconds interval between HA updates
+USE_WEBHOOK = True         # Enable Home Assistant Webhook updating
 
-# Sensor configuration
-TEMP_HUMIDITY_SENSOR = {
-    "sda": 5,
-    "scl": 6,
-    "type": "AHT20"
+# Dual Sensor Configuration
+TEMP_HUMIDITY_SENSORS = {
+    "sensor1": {
+        "sda": 5,
+        "scl": 6,
+        "type": "AHT20"
+    },
+    "sensor2": {
+        "sda": 7,
+        "scl": 8,
+        "type": "AHT20"
+    }
 }
 
 SOIL_MOISTURE_SENSOR = None
+

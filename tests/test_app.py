@@ -406,3 +406,46 @@ class TestApp:
         )
         
         fan_mock.set_speed.assert_called_with(30)
+
+    @patch('time.sleep')
+    @patch('time.sleep_ms')
+    def test_run_dual_temp_humidity_webhook(self, mock_sleep_ms, mock_sleep):
+        from devices.temp_humidity import config as temp_hum_config
+
+        sensor_instance = MagicMock()
+        sensor_instance.temperature = 21.5
+        sensor_instance.relative_humidity = 48.0
+        ahtx0_mock.AHT20.return_value = sensor_instance
+        homeassistant_mock.is_webhook_enabled.return_value = True
+
+        from lib.app import run
+
+        class LoopComplete(BaseException):
+            pass
+
+        def sleep_side_effect(*args, **kwargs):
+            if homeassistant_mock.post_webhook.called:
+                raise LoopComplete()
+
+        mock_sleep.side_effect = sleep_side_effect
+        mock_sleep_ms.side_effect = sleep_side_effect
+        machine_mock.deepsleep.side_effect = LoopComplete()
+
+        with pytest.raises(LoopComplete):
+            run(temp_hum_config)
+
+        # Assert two sensors were initialized
+        assert ahtx0_mock.AHT20.call_count == 2
+        wifi_mock.connect.assert_called_once()
+
+        # Assert post_webhook was called with the dual sensor payload
+        homeassistant_mock.post_webhook.assert_called_once()
+        payload = homeassistant_mock.post_webhook.call_args[0][0]
+        assert payload["sensor1_temp"] == 21.5
+        assert payload["sensor1_humidity"] == 48.0
+        assert payload["sensor2_temp"] == 21.5
+        assert payload["sensor2_humidity"] == 48.0
+        assert payload["status"] == "Normal"
+
+
+

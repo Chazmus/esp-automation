@@ -76,3 +76,19 @@ def test_alert_manager_extensibility():
     assert status == "Soil Dry (12.0%)"
     assert severity == "warning"
     assert len(active) == 1
+
+def test_alert_manager_dual_sensors():
+    config = DummyConfig()
+    manager = AlertManager(config)
+    
+    # sensor1 normal, sensor2 has high temp
+    readings = {
+        "sensor1": (22.0, 50.0),
+        "sensor2": (32.0, 45.0)
+    }
+    
+    status, severity, active = manager.evaluate(readings)
+    assert "Sensor2 High Temp" in status
+    assert severity == "critical"
+    assert len(active) == 1
+
