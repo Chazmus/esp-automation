@@ -113,35 +113,4 @@ class TestHomeAssistant:
         assert payload["attributes"]["severity"] == "normal"
         assert payload["attributes"]["alert_count"] == 0
 
-    def test_post_webhook_success(self):
-        from lib.homeassistant import post_webhook, get_webhook_url
-        
-        response_mock = MagicMock()
-        response_mock.status_code = 200
-        urequests_mock.post.return_value = response_mock
-
-        secrets_mock.HA_WEBHOOK_URL = "https://ha.mydomain.com/api/webhook/secret_token_123"
-
-        payload = {"temp": 22.5, "humidity": 45.0, "battery": 98.0}
-        success = post_webhook(payload)
-
-        assert success is True
-        urequests_mock.post.assert_called_once()
-        args, kwargs = urequests_mock.post.call_args
-        assert args[0] == "https://ha.mydomain.com/api/webhook/secret_token_123"
-        assert kwargs["headers"] == {"Content-Type": "application/json"}
-        assert json.loads(kwargs["data"].decode('utf-8')) == payload
-
-    def test_post_webhook_failure(self):
-        from lib.homeassistant import post_webhook
-
-        secrets_mock.HA_WEBHOOK_URL = "https://ha.mydomain.com/api/webhook/secret_token_123"
-        response_mock = MagicMock()
-        response_mock.status_code = 500
-        response_mock.text = "Internal Server Error"
-        urequests_mock.post.return_value = response_mock
-
-        payload = {"temp": 22.5}
-        success = post_webhook(payload)
-        assert success is False
 

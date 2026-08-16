@@ -6,7 +6,6 @@ DEVICE_NAME = secrets.DEVICE_NAME
 # Execution parameters
 DEEP_SLEEP_ENABLED = False  # Continuous execution (mains powered)
 SLEEP_SECONDS = 30         # 30 seconds interval between HA updates
-USE_WEBHOOK = True         # Enable Home Assistant Webhook updating
 
 # Dual Sensor Configuration
 TEMP_HUMIDITY_SENSORS = {
