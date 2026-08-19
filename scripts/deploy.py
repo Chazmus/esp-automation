@@ -206,11 +206,13 @@ def main():
             print(f"   👉 Deploying shared {os.path.relpath(filepath, project_root)} to :{remote_dest}...")
             if is_remote:
                 try:
+                    env = os.environ.copy()
+                    env["WEBREPL_PASSWORD"] = secrets.WEBREPL_PASSWORD
                     webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
                     subprocess.run([
-                        sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
+                        sys.executable, webrepl_cli,
                         filepath, f"{ip_addr}:{remote_dest}"
-                    ], check=True)
+                    ], env=env, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {relpath}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
@@ -233,11 +235,13 @@ def main():
             print(f"   👉 Deploying device file {os.path.relpath(filepath, project_root)} to :{filename}...")
             if is_remote:
                 try:
+                    env = os.environ.copy()
+                    env["WEBREPL_PASSWORD"] = secrets.WEBREPL_PASSWORD
                     webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
                     subprocess.run([
-                        sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
+                        sys.executable, webrepl_cli,
                         filepath, f"{ip_addr}:{filename}"
-                    ], check=True)
+                    ], env=env, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)

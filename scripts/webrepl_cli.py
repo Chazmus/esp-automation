@@ -294,6 +294,9 @@ def main():
         help(1)
 
     if passwd is None:
+        passwd = os.environ.get("WEBREPL_PASSWORD")
+
+    if passwd is None:
         import getpass
         passwd = getpass.getpass()
 
