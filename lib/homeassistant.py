@@ -2,7 +2,7 @@ import urequests
 import json
 import secrets
 
-def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of_measurement=None, device_class=None, extra_attributes=None):
+def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, **kwargs):
     """
     Helper function to post a sensor state for the current device.
     Automatically prepends 'esp32_{secrets.DEVICE_NAME}_' to the sensor ID
@@ -11,17 +11,17 @@ def post_device_sensor(sensor_suffix, state_value, friendly_suffix=None, unit_of
     sensor_id = f"esp32_{secrets.DEVICE_NAME}_{sensor_suffix}"
     friendly_name = f"ESP32 {secrets.DEVICE_NAME} {friendly_suffix}" if friendly_suffix else None
 
+    if friendly_name:
+        kwargs["friendly_name"] = friendly_name
+
     return post_state(
         sensor_id=sensor_id,
         state_value=state_value,
-        friendly_name=friendly_name,
-        unit_of_measurement=unit_of_measurement,
-        device_class=device_class,
-        extra_attributes=extra_attributes
+        **kwargs
     )
 
 
-def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=None, device_class=None, extra_attributes=None):
+def post_state(sensor_id, state_value, **kwargs):
     """
     Posts a sensor state to Home Assistant's REST API.
     The entity 'sensor.<sensor_id>' will be created or updated in Home Assistant.
@@ -42,12 +42,12 @@ def post_state(sensor_id, state_value, friendly_name=None, unit_of_measurement=N
     
     # Construct attributes dict
     attributes = {}
-    if friendly_name:
-        attributes["friendly_name"] = friendly_name
-    if unit_of_measurement:
-        attributes["unit_of_measurement"] = unit_of_measurement
-    if device_class:
-        attributes["device_class"] = device_class
+    extra_attributes = kwargs.pop("extra_attributes", None)
+
+    for key, value in kwargs.items():
+        if value is not None:
+            attributes[key] = value
+
     if extra_attributes:
         attributes.update(extra_attributes)
         
