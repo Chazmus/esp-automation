@@ -87,8 +87,7 @@ class TestHomeAssistant:
             state_value="22.5",
             friendly_name="ESP32 test_device Temperature",
             unit_of_measurement="°C",
-            device_class="temperature",
-            extra_attributes=None
+            device_class="temperature"
         )
 
     def test_post_state_with_extra_attributes(self):

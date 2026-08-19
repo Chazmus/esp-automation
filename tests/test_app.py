@@ -23,6 +23,11 @@ sys.modules['battery'] = battery_mock
 sys.modules['usb'] = usb_mock
 sys.modules['ahtx0'] = ahtx0_mock
 
+secrets_mock = MagicMock()
+secrets_mock.DEVICE_NAME = "test_device"
+sys.modules['secrets'] = secrets_mock
+sys.modules['lib.secrets'] = secrets_mock
+
 # Now we can import our app under test (it won't exist yet, but we define the tests)
 # We can't import `run` directly yet if the file doesn't exist, but we will write the tests.
 # Using standard import inside test functions so pytest doesn't crash on import during test discovery
