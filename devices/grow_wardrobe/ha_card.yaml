@@ -9,6 +9,22 @@
 type: picture-elements
 image: /local/growdrobe-dashboard.png
 elements:
+  # ==================== 0. SYSTEM STATUS (TOP RIGHT) ====================
+  - type: state-label
+    entity: binary_sensor.esp32_growdrobe_status
+    prefix: 'Status: '
+    style:
+      top: 6%
+      left: 88%
+      transform: 'translate(-50%, 0)'
+      color: '#ffffff'
+      font-size: 13px
+      font-weight: bold
+      background-color: 'rgba(0, 0, 0, 0.65)'
+      padding: 4px 10px
+      border-radius: 4px
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8)
+
   # ==================== 1. CANOPY SENSOR (TOP) ====================
   # Title
   - type: state-label
