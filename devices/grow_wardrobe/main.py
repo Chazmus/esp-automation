@@ -46,9 +46,6 @@ if hasattr(config, "SOIL_MOISTURE_SENSOR"):
     cfg = config.SOIL_MOISTURE_SENSOR
     soil_sensor = SoilMoistureSensor(adc_pin=cfg["adc_pin"], power_pin=cfg.get("power_pin"), dry_value=cfg.get("dry", 3800), wet_value=cfg.get("wet", 1275), num_samples=cfg.get("num_samples", 5))
 
-import battery
-import homeassistant
-
 # --- 3. MQTT Configuration ---
 MQTT_BROKER = getattr(secrets, 'MQTT_BROKER', secrets.HA_URL.replace("http://", "").split(":")[0])
 MQTT_USER = getattr(secrets, 'MQTT_USER', 'mqtt_user')
@@ -56,8 +53,8 @@ MQTT_PASSWORD = getattr(secrets, 'MQTT_PASSWORD', '')
 CLIENT_ID = f"esp32_{config.DEVICE_NAME}"
 BASE_TOPIC = config.MQTT_BASE_TOPIC
 
-def pub(client, topic, payload):
-    client.publish(f"{BASE_TOPIC}/{topic}".encode(), str(payload).encode())
+def pub(client, topic, payload, retain=False):
+    client.publish(f"{BASE_TOPIC}/{topic}".encode(), str(payload).encode(), retain=retain)
 
 def mqtt_callback(topic, msg):
     global vent_mode, irrig_mode
@@ -129,7 +126,11 @@ if wifi.connect():
     client.set_callback(mqtt_callback)
     
     try:
+        # Set Last Will and Testament for automatic offline detection
+        client.set_last_will(f"{BASE_TOPIC}/status".encode(), b"offline", retain=True)
         client.connect()
+        # Publish online status
+        pub(client, "status", "online", retain=True)
         # Subscribe to all command topics
         client.subscribe(f"{BASE_TOPIC}/+/+/set".encode())
         client.subscribe(f"{BASE_TOPIC}/+/set".encode())
@@ -166,43 +167,36 @@ if wifi.connect():
                         print(log)
                     pub(client, "ventilation/fan/state", int(fan.speed))
                     
-                # Post telemetry every 10 seconds
+                # Post telemetry every 10 seconds via MQTT
                 if time.ticks_diff(current_time, last_ha_post) > 10000:
                     last_ha_post = current_time
-                    print("📡 Posting sensor telemetry to Home Assistant...")
-                    try:
-                        for zone, (t, h) in readings.items():
-                            if t is not None:
-                                suffix = f"{zone}_temp" if zone != "default" else "temp"
-                                friendly = f"{zone[0].upper() + zone[1:]} Temperature" if zone != "default" else "Temperature"
-                                homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{t:.2f}", friendly_suffix=friendly, unit_of_measurement="°C", device_class="temperature")
-                            if h is not None:
-                                suffix = f"{zone}_humidity" if zone != "default" else "humidity"
-                                friendly = f"{zone[0].upper() + zone[1:]} Humidity" if zone != "default" else "Humidity"
-                                homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{h:.2f}", friendly_suffix=friendly, unit_of_measurement="%", device_class="humidity")
+                    telemetry = {}
+                    for zone, (t, h) in readings.items():
+                        if t is not None:
+                            telemetry[f"{zone}_temp"] = round(t, 2)
+                        if h is not None:
+                            telemetry[f"{zone}_humidity"] = round(h, 2)
+                        if t is not None and h is not None:
+                            offset = vpd_controller.leaf_offset if zone in ("canopy", "pot") else 0.0
+                            vpd_val = calculate_vpd(t, h, leaf_offset=offset)
+                            if vpd_val is not None:
+                                telemetry[f"{zone}_vpd"] = round(vpd_val, 2)
                                 
-                            if t is not None and h is not None:
-                                offset = vpd_controller.leaf_offset if zone in ("canopy", "pot") else 0.0
-                                vpd_val = calculate_vpd(t, h, leaf_offset=offset)
-                                if vpd_val is not None:
-                                    suffix = f"{zone}_vpd" if zone != "default" else "vpd"
-                                    friendly = f"{zone.capitalize()} VPD" if zone != "default" else "VPD"
-                                    homeassistant.post_device_sensor(sensor_suffix=suffix, state_value=f"{vpd_val:.2f}", friendly_suffix=friendly, unit_of_measurement="kPa", device_class=None)
+                    if soil_sensor is not None:
+                        raw, pct = soil_sensor.read()
+                        if pct is not None:
+                            telemetry["moisture"] = round(pct, 1)
 
-                                
-                        if soil_sensor is not None:
-                            raw, pct = soil_sensor.read()
-                            if pct is not None:
-                                homeassistant.post_device_sensor(sensor_suffix="moisture", state_value=f"{pct:.1f}", friendly_suffix="Soil Moisture", unit_of_measurement="%", device_class="humidity")
-                                
-                        if fan is not None:
-                            homeassistant.post_device_sensor(sensor_suffix="fan_speed", state_value=f"{int(fan.speed)}", friendly_suffix="Fan Speed", unit_of_measurement="%", device_class=None)
+                    if fan is not None:
+                        telemetry["fan_speed"] = int(fan.speed)
 
-                        if hasattr(vpd_controller, 'last_vpd') and vpd_controller.last_vpd is not None:
-                            homeassistant.post_device_sensor(sensor_suffix="vpd", state_value=f"{vpd_controller.last_vpd:.2f}", friendly_suffix="VPD", unit_of_measurement="kPa", device_class=None)
-                            
-                    except Exception as e:
-                        print(f"⚠️ Failed to post to Home Assistant: {e}")
+                    if hasattr(vpd_controller, 'last_vpd') and vpd_controller.last_vpd is not None:
+                        telemetry["vpd"] = round(vpd_controller.last_vpd, 2)
+
+                    if telemetry:
+                        payload_json = json.dumps(telemetry)
+                        print(f"📡 MQTT Telemetry: {payload_json}")
+                        pub(client, "telemetry", payload_json)
             
             # 3. Irrigation State Machine
             if irrig_mode == "AUTO" and vent_mode != "DRY":
@@ -218,9 +212,18 @@ if wifi.connect():
     except KeyboardInterrupt:
         print("\nExiting. Ensuring safe state...")
         irrig_controller.force_idle()
-        client.disconnect()
+        try:
+            pub(client, "status", "offline", retain=True)
+            client.disconnect()
+        except Exception:
+            pass
     except Exception as e:
         print(f"❌ Crash: {e}")
         irrig_controller.force_idle()
+        try:
+            pub(client, "status", "offline", retain=True)
+            client.disconnect()
+        except Exception:
+            pass
 else:
     print("❌ WiFi failed.")
