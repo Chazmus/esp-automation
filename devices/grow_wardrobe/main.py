@@ -24,10 +24,10 @@ irrig_mode = "AUTO"
 # --- 2. Hardware Initialization ---
 fan = PWMFan(pin=config.PWM_FAN["pin"], freq=config.PWM_FAN.get("freq", 25000))
 
-# Relays (Active-Low configuration)
-drip_relay = Relay(pin=config.IRRIGATION_CONFIG["drip_pin"], active_high=False)
-agitate_relay = Relay(pin=config.IRRIGATION_CONFIG["agitate_pin"], active_high=False)
-waste_relay = Relay(pin=config.IRRIGATION_CONFIG["waste_pin"], active_high=False)
+# Relays (Active-High configuration for COM-High jumper setting)
+drip_relay = Relay(pin=config.IRRIGATION_CONFIG["drip_pin"], active_high=True)
+agitate_relay = Relay(pin=config.IRRIGATION_CONFIG["agitate_pin"], active_high=True)
+waste_relay = Relay(pin=config.IRRIGATION_CONFIG["waste_pin"], active_high=True)
 
 # Controllers
 vpd_controller = VPDController(fan, config.PWM_FAN)
