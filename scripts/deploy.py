@@ -11,27 +11,9 @@ def find_serial_port():
         return None
     return sorted(ports)[0]
 
-def webrepl_soft_reset(project_root, ip, password):
-    sys.path.insert(0, os.path.join(project_root, "scripts"))
-    import webrepl_cli
-    import socket
-    try:
-        s = socket.socket()
-        s.settimeout(3)
-        s.connect((ip, 8266))
-        webrepl_cli.client_handshake(s)
-        ws = webrepl_cli.websocket(s)
-        webrepl_cli.login(ws, password)
-        # Send Ctrl+C to interrupt any running script
-        ws.write(b"\x03", frame=0x81)
-        time.sleep(0.5)
-        # Send Ctrl+D (soft reboot) using text frame (0x81)
-        ws.write(b"\x04", frame=0x81)
-        print("🔄 WebREPL soft-reset command sent successfully.")
-        return True
-    except Exception as e:
-        print(f"⚠️ WebREPL soft-reset failed: {e}")
-        return False
+def webrepl_reset(project_root, ip, password):
+    print("🔄 Sending hardware reset command via WebREPL...")
+    return webrepl_run_exec(project_root, ip, password, "import machine; machine.reset()")
 
 def webrepl_run_exec(project_root, ip, password, py_cmd):
     sys.path.insert(0, os.path.join(project_root, "scripts"))
@@ -75,9 +57,15 @@ def main():
     # Add local lib folder to python path to resolve local secrets
     sys.path.insert(0, os.path.join(project_root, "lib"))
     
-    # 1. Parse arguments (check for --ip <ip_address>)
+    # 1. Parse arguments (check for --ip <ip_address> or --remote)
     ip_addr = None
     args = sys.argv[1:]
+    
+    # Check for --remote flag
+    use_remote = False
+    if "--remote" in args:
+        use_remote = True
+        args.remove("--remote")
     
     # Check for --ip flag
     if "--ip" in args:
@@ -87,6 +75,7 @@ def main():
             # Remove --ip and the ip address from the args list
             args.pop(ip_idx + 1)
             args.pop(ip_idx)
+            use_remote = True
         except IndexError:
             print("❌ Error: --ip option requires an IP address argument.", file=sys.stderr)
             sys.exit(1)
@@ -95,7 +84,7 @@ def main():
     
     if len(args) < 1:
         print("❌ Error: Please specify a device directory to deploy.", file=sys.stderr)
-        print("Usage: python3 scripts/deploy.py <device_directory> [--ip <ip_address>]", file=sys.stderr)
+        print("Usage: python3 scripts/deploy.py <device_directory> [--remote] [--ip <ip_address>]", file=sys.stderr)
         print("\nAvailable devices:", file=sys.stderr)
         for dev in available_devices:
             print(f"  * {dev}", file=sys.stderr)
@@ -113,8 +102,32 @@ def main():
     print("=== ESP32-C3 Selective Deployer ===")
     print(f"📱 Target Device: {device}")
     
+    # Auto-resolve device IP from config.py if not specified
+    if ip_addr is None:
+        try:
+            import importlib.util
+            dev_cfg_path = os.path.join(project_root, "devices", device, "config.py")
+            if os.path.isfile(dev_cfg_path):
+                spec = importlib.util.spec_from_file_location("dev_config", dev_cfg_path)
+                if spec and spec.loader:
+                    dev_cfg = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(dev_cfg)
+                    if hasattr(dev_cfg, "DEVICE_IP"):
+                        ip_addr = dev_cfg.DEVICE_IP
+        except Exception:
+            pass
+
     # 2. Set port & setup connection details
-    is_remote = ip_addr is not None
+    serial_port = find_serial_port() if not use_remote else None
+    if use_remote or (serial_port is None and ip_addr is not None):
+        if ip_addr is None:
+            print(f"❌ Error: Remote deployment requested for '{device}', but no IP was specified or configured.", file=sys.stderr)
+            sys.exit(1)
+        is_remote = True
+        if not use_remote:
+            print(f"💡 No USB serial port detected. Auto-detected configured IP: {ip_addr}")
+    else:
+        is_remote = False
     cmd_prefix = []
     
     # Choose correct mpremote/esptool executables
@@ -249,11 +262,11 @@ def main():
                     print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
                 
-    # 8. Soft reset the board to launch the new code
-    print("🔄 Soft resetting the board to execute new code...")
+    # 8. Reset the board to launch the new code
+    print("🔄 Resetting the board to execute new code...")
     if is_remote:
         import secrets
-        webrepl_soft_reset(project_root, ip_addr, secrets.WEBREPL_PASSWORD)
+        webrepl_reset(project_root, ip_addr, secrets.WEBREPL_PASSWORD)
     else:
         mpremote_cmd_reset = cmd_prefix + [mpremote, "connect", port, "resume", "soft-reset"]
         try:

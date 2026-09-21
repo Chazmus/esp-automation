@@ -18,18 +18,12 @@ def calculate_vpd(temp, humidity, leaf_offset=0.0):
 class VPDController:
     def __init__(self, fan, config):
         self.fan = fan
-        self.mode = "GROW"
+        self.mode = "AUTO"
         
-        # Grow mode parameters
-        self.grow_target_vpd = config.get("target_vpd", 1.2)
-        self.grow_leaf_offset = config.get("leaf_temp_offset", 2.0)
-        self.grow_min_speed = config.get("min_speed", 30)
-        
-        # Dry mode parameters
-        self.dry_target_vpd = config.get("dry_target_vpd", 0.9)
-        self.dry_leaf_offset = config.get("dry_leaf_temp_offset", 0.0)
-        self.dry_min_speed = config.get("dry_min_speed", 20)
-        self.dry_max_safe_humidity = config.get("dry_max_safe_humidity", 65.0)
+        # VPD parameters
+        self.target_vpd = config.get("target_vpd", 1.2)
+        self.leaf_offset = config.get("leaf_temp_offset", 2.0)
+        self.min_speed = config.get("min_speed", 30)
         
         self.kp = config.get("kp", 45.0)
         self.ki = config.get("ki", 0.02)
@@ -45,49 +39,10 @@ class VPDController:
         self.integral_error = 0.0
         self.last_vpd = 0.0
 
-    @property
-    def target_vpd(self):
-        return self.dry_target_vpd if self.mode == "DRY" else self.grow_target_vpd
-
-    @target_vpd.setter
-    def target_vpd(self, val):
-        if self.mode == "DRY":
-            self.dry_target_vpd = val
-        else:
-            self.grow_target_vpd = val
-
-    @property
-    def leaf_offset(self):
-        return self.dry_leaf_offset if self.mode == "DRY" else self.grow_leaf_offset
-
-    @leaf_offset.setter
-    def leaf_offset(self, val):
-        if self.mode == "DRY":
-            self.dry_leaf_offset = val
-        else:
-            self.grow_leaf_offset = val
-
-    @property
-    def min_speed(self):
-        return self.dry_min_speed if self.mode == "DRY" else self.grow_min_speed
-
-    @min_speed.setter
-    def min_speed(self, val):
-        if self.mode == "DRY":
-            self.dry_min_speed = val
-        else:
-            self.grow_min_speed = val
-
-    @property
-    def active_max_safe_humidity(self):
-        return self.dry_max_safe_humidity if self.mode == "DRY" else self.max_safe_humidity
-
     def set_mode(self, mode):
         m = str(mode).upper()
         if m in ("AUTO", "GROW"):
-            self.mode = "GROW"
-        elif m == "DRY":
-            self.mode = "DRY"
+            self.mode = "AUTO"
         elif m == "MANUAL":
             self.mode = "MANUAL"
         self.integral_error = 0.0
@@ -97,7 +52,7 @@ class VPDController:
             return
             
         cur_min_speed = self.min_speed
-        cur_max_safe_hum = self.active_max_safe_humidity
+        cur_max_safe_hum = self.max_safe_humidity
         cur_target_vpd = self.target_vpd
         cur_leaf_offset = self.leaf_offset
 
@@ -107,7 +62,7 @@ class VPDController:
             return f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe. Fan 100%."
         if canopy_humidity > cur_max_safe_hum:
             self.fan.set_speed(100)
-            return f"💨 OVERRIDE ({self.mode}): Canopy Hum ({canopy_humidity:.1f}%) > max safe ({cur_max_safe_hum:.1f}%). Fan 100%."
+            return f"💨 OVERRIDE: Canopy Hum ({canopy_humidity:.1f}%) > max safe ({cur_max_safe_hum:.1f}%). Fan 100%."
         if canopy_temp < self.min_safe_temp:
             self.fan.set_speed(cur_min_speed)
             return f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe. Fan {cur_min_speed}%."

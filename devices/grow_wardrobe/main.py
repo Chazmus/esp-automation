@@ -18,7 +18,7 @@ print(f"ESP32-C3 Node: {config.DEVICE_NAME} (MQTT HOA Edition)")
 print("========================================\n")
 
 # --- 1. State Tracking ---
-vent_mode = "GROW"
+vent_mode = "AUTO"
 irrig_mode = "AUTO"
 
 # --- 2. Hardware Initialization ---
@@ -66,22 +66,12 @@ def mqtt_callback(topic, msg):
     if topic.endswith("ventilation/mode/set"):
         raw_mode = msg.upper()
         if raw_mode in ("AUTO", "GROW"):
-            vent_mode = "GROW"
-        elif raw_mode == "DRY":
-            vent_mode = "DRY"
-            # Lockout irrigation in DRY mode
-            irrig_mode = "MANUAL"
-            irrig_controller.force_idle()
-            pub(client, "irrigation/mode/state", "MANUAL")
-            pub(client, "irrigation/drip/state", "OFF")
-            pub(client, "irrigation/agitate/state", "OFF")
-            pub(client, "irrigation/waste/state", "OFF")
-            print("Switched Ventilation to DRY. Irrigation locked out & pumps stopped.")
+            vent_mode = "AUTO"
         elif raw_mode == "MANUAL":
             vent_mode = "MANUAL"
 
         vpd_controller.set_mode(vent_mode)
-        pub(client, "ventilation/mode/state", vent_mode)
+        pub(client, "ventilation/mode/state", vent_mode, retain=True)
         print(f"Switched Ventilation mode to {vent_mode}")
             
     elif topic.endswith("ventilation/fan/set"):
@@ -91,18 +81,18 @@ def mqtt_callback(topic, msg):
             
     # -- Irrigation Controls --
     elif topic.endswith("irrigation/mode/set"):
-        if vent_mode == "DRY" and msg.upper() == "AUTO":
-            print("⚠️ Cannot set Irrigation to AUTO while in DRY mode.")
-            pub(client, "irrigation/mode/state", "MANUAL")
-        else:
-            irrig_mode = msg.upper()
-            pub(client, "irrigation/mode/state", irrig_mode)
-            if irrig_mode == "MANUAL":
-                irrig_controller.force_idle()
-                print("Switched Irrigation to MANUAL. All pumps stopped.")
-                pub(client, "irrigation/drip/state", "OFF")
-                pub(client, "irrigation/agitate/state", "OFF")
-                pub(client, "irrigation/waste/state", "OFF")
+        raw_mode = msg.upper()
+        if raw_mode == "AUTO":
+            irrig_mode = "AUTO"
+        elif raw_mode == "MANUAL":
+            irrig_mode = "MANUAL"
+            irrig_controller.force_idle()
+            print("Switched Irrigation to MANUAL. All pumps stopped.")
+            pub(client, "irrigation/drip/state", "OFF")
+            pub(client, "irrigation/agitate/state", "OFF")
+            pub(client, "irrigation/waste/state", "OFF")
+
+        pub(client, "irrigation/mode/state", irrig_mode, retain=True)
             
     elif topic.endswith("irrigation/drip/set") and irrig_mode == "MANUAL":
         drip_relay.on() if msg == "ON" else drip_relay.off()
@@ -137,8 +127,8 @@ if wifi.connect():
         print("✅ MQTT Connected & Subscribed to all /set topics.")
         
         # Publish initial states
-        pub(client, "ventilation/mode/state", vent_mode)
-        pub(client, "irrigation/mode/state", irrig_mode)
+        pub(client, "ventilation/mode/state", vent_mode, retain=True)
+        pub(client, "irrigation/mode/state", irrig_mode, retain=True)
         
         last_sensor_read = 0
         last_ha_post = 0
@@ -161,7 +151,7 @@ if wifi.connect():
                 canopy_t, canopy_h = readings.get("canopy", (None, None))
                 ambient_t, ambient_h = readings.get("ambient", (None, None))
                 
-                if vent_mode in ("GROW", "DRY", "AUTO"):
+                if vent_mode == "AUTO":
                     log = vpd_controller.evaluate(canopy_t, canopy_h, ambient_t, ambient_h, dt_seconds=5.0)
                     if log:
                         print(log)
@@ -199,7 +189,7 @@ if wifi.connect():
                         pub(client, "telemetry", payload_json)
             
             # 3. Irrigation State Machine
-            if irrig_mode == "AUTO" and vent_mode != "DRY":
+            if irrig_mode == "AUTO":
                 log = irrig_controller.evaluate()
                 if log:
                     print(log)

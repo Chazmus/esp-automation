@@ -4,6 +4,7 @@ import secrets
 DEVICE_NAME = secrets.DEVICE_NAME
 
 # Execution parameters
+DEVICE_IP = "192.168.86.50"
 DEEP_SLEEP_ENABLED = False
 SLEEP_SECONDS = 10  # Cycle interval
 
@@ -54,13 +55,7 @@ PWM_FAN = {
     # VPD Specific settings
     "leaf_temp_offset": 2.0,     # Leaf is assumed 2C cooler than canopy air
     "ema_alpha": 0.2,            # Exponential moving average filter coefficient
-    "deadband": 0.05,            # VPD error deadband in kPa
-
-    # Drying Mode Specific Settings
-    "dry_target_vpd": 0.9,       # Target VPD for drying (kPa)
-    "dry_leaf_temp_offset": 0.0, # Stems hanging to dry match ambient air temp
-    "dry_min_speed": 20,         # Gentler minimum fan speed for drying (%)
-    "dry_max_safe_humidity": 65.0 # Bud rot failsafe threshold (65% RH)
+    "deadband": 0.05             # VPD error deadband in kPa
 }
 
 IRRIGATION_CONFIG = {
