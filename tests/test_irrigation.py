@@ -198,3 +198,21 @@ def test_config_store(tmp_path):
     new_store = ConfigStore(filename=test_file)
     assert new_store.get("medium") == "SOIL"
     assert new_store.get("soil_trigger_pct") == 32.0
+
+def test_schedule_next_cycle():
+    irrig, agitate, waste = create_mock_relays()
+    cfg = {"medium": "COCO", "coco_interval_hours": 4}
+    controller = IrrigationController(irrig, agitate, waste, cfg)
+
+    # Schedule next cycle in 1800 seconds (30 mins)
+    controller.schedule_next_cycle(delay_seconds=1800)
+    remaining = controller.get_next_cycle_in_seconds()
+    assert 1790 <= remaining <= 1810
+
+    # Schedule next cycle now (0 seconds)
+    controller.schedule_next_cycle(delay_seconds=0)
+    assert controller.get_next_cycle_in_seconds() == 0
+    # Next evaluate() should start the cycle
+    log = controller.evaluate()
+    assert log == "Started Agitation"
+    assert controller.state == IrrigationState.AGITATING

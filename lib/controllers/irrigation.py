@@ -145,3 +145,22 @@ class IrrigationController:
         """Called when switching to Manual mode or stopping cycles immediately."""
         self._ensure_all_off()
         self._transition(IrrigationState.IDLE)
+
+    def schedule_next_cycle(self, delay_seconds=0):
+        """Schedule the next automated cycle to occur in delay_seconds from now.
+        Subsequent cycles will follow the configured interval after this scheduled cycle.
+        """
+        current_time = time.ticks_ms()
+        delay_ms = int(float(delay_seconds) * 1000)
+        self.last_cycle_start = current_time - self.cycle_interval_ms + delay_ms
+        if delay_seconds <= 0 and self.state == IrrigationState.IDLE:
+            self.last_cycle_start = current_time - self.cycle_interval_ms
+
+    def get_next_cycle_in_seconds(self):
+        """Returns remaining seconds until the next cycle starts (0 if currently active or overdue)."""
+        if self.state != IrrigationState.IDLE:
+            return 0
+        current_time = time.ticks_ms()
+        time_since = time.ticks_diff(current_time, self.last_cycle_start)
+        remaining_ms = self.cycle_interval_ms - time_since
+        return max(0, int(remaining_ms / 1000))

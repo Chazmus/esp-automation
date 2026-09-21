@@ -50,18 +50,34 @@ export function App() {
   const [lightPreset, setLightPreset] = useState<'18/6' | '12/12' | '24/0'>('18/6');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Helper to calculate upcoming feedings
-  const getUpcomingFeedings = (intervalHours: number, count = 3) => {
-    const now = new Date();
-    const feeds: { timeStr: string; relStr: string }[] = [];
-    for (let i = 1; i <= count; i++) {
-      const feedTime = new Date(now.getTime() + i * intervalHours * 60 * 60 * 1000);
+  // Next Cycle Scheduling State
+  const [nextFeedSeconds, setNextFeedSeconds] = useState<number | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [customFeedTime, setCustomFeedTime] = useState('');
+
+  // Helper to calculate upcoming feedings based on scheduled next cycle
+  const getScheduledFeedings = (intervalHours: number, nextSec: number | null, count = 3) => {
+    const now = Date.now();
+    const baseTime = nextSec !== null ? now + nextSec * 1000 : now + intervalHours * 3600 * 1000;
+    const feeds: { timeStr: string; relStr: string; isNext: boolean }[] = [];
+    for (let i = 0; i < count; i++) {
+      const feedTime = new Date(baseTime + i * intervalHours * 3600 * 1000);
       const hours = String(feedTime.getHours()).padStart(2, '0');
       const mins = String(feedTime.getMinutes()).padStart(2, '0');
-      const diffHours = i * intervalHours;
+      const diffMinutes = Math.max(0, Math.round((feedTime.getTime() - now) / (60 * 1000)));
+      let relStr = '';
+      if (diffMinutes < 1) {
+        relStr = 'imminent / now';
+      } else if (diffMinutes < 60) {
+        relStr = `in ~${diffMinutes} mins`;
+      } else {
+        const h = (diffMinutes / 60).toFixed(1);
+        relStr = `in ~${h} hrs`;
+      }
       feeds.push({
         timeStr: `${hours}:${mins}`,
-        relStr: `in ~${diffHours} hrs`,
+        relStr,
+        isNext: i === 0,
       });
     }
     return feeds;
@@ -114,6 +130,16 @@ export function App() {
           }
         }).catch((err) => {
           console.warn('MQTT config subscription error:', err);
+        });
+
+        // Subscribe to next cycle countdown state from the ESP32
+        subscribeMqttTopic(conn, 'wardrobe/irrigation/next_cycle/state', (msg) => {
+          const sec = Number(msg.payload);
+          if (!isNaN(sec)) {
+            setNextFeedSeconds(sec);
+          }
+        }).catch((err) => {
+          console.warn('MQTT next_cycle subscription error:', err);
         });
       })
       .catch((err) => {
@@ -326,6 +352,42 @@ export function App() {
     await setEntityState(connection, 'select', 'select_option', 'select.irrigation_mode', {
       option: nextMode,
     });
+  };
+
+  const handleTriggerFeedNow = async () => {
+    if (!connection) return;
+    if (irrMode === 'MANUAL') {
+      await setEntityState(connection, 'select', 'select_option', 'select.irrigation_mode', {
+        option: 'AUTO',
+      });
+    }
+    await sendMqttCommand(connection, 'wardrobe/irrigation/next_cycle/set', '0');
+    setNextFeedSeconds(0);
+  };
+
+  const handleScheduleNextCycle = async (delaySeconds: number) => {
+    if (!connection) return;
+    if (irrMode === 'MANUAL') {
+      await setEntityState(connection, 'select', 'select_option', 'select.irrigation_mode', {
+        option: 'AUTO',
+      });
+    }
+    await sendMqttCommand(connection, 'wardrobe/irrigation/next_cycle/set', String(delaySeconds));
+    setNextFeedSeconds(delaySeconds);
+    setShowScheduleModal(false);
+  };
+
+  const handleScheduleSpecificTime = async (timeStr: string) => {
+    if (!connection || !timeStr) return;
+    const [h, m] = timeStr.split(':').map(Number);
+    const now = new Date();
+    const target = new Date();
+    target.setHours(h, m, 0, 0);
+    if (target.getTime() <= now.getTime()) {
+      target.setDate(target.getDate() + 1);
+    }
+    const delaySeconds = Math.max(0, Math.round((target.getTime() - now.getTime()) / 1000));
+    await handleScheduleNextCycle(delaySeconds);
   };
 
   const handleFanSpeedChange = async (val: number) => {
@@ -968,20 +1030,51 @@ export function App() {
 
               {growMedium === 'coco' ? (
                 <div className="space-y-4">
-                  {/* Schedule Chips */}
+                  {/* Schedule Chips & Interactive Timing Controls */}
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
-                      <CalendarClock className="w-3.5 h-3.5 text-emerald-400" />
-                      Estimated Upcoming Feedings (Every {cocoIntervalHours}h)
-                    </label>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <CalendarClock className="w-3.5 h-3.5 text-emerald-400" />
+                        Fertigation Schedule (Every {cocoIntervalHours}h)
+                      </label>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleTriggerFeedNow}
+                          disabled={!connection}
+                          className="px-2.5 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-medium flex items-center gap-1 transition shadow-sm"
+                          title="Trigger an immediate watering cycle"
+                        >
+                          ⚡ Water Now
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowScheduleModal(true)}
+                          disabled={!connection}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
+                          title="Configure the time for the next scheduled feeding"
+                        >
+                          <Clock className="w-3 h-3 text-indigo-400" />
+                          Schedule Next Feed
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {getUpcomingFeedings(cocoIntervalHours).map((feed, idx) => (
+                      {getScheduledFeedings(cocoIntervalHours, nextFeedSeconds).map((feed, idx) => (
                         <div
                           key={idx}
-                          className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col gap-1 relative overflow-hidden"
+                          className={`p-3 rounded-xl flex flex-col gap-1 relative overflow-hidden border transition ${
+                            feed.isNext
+                              ? 'bg-emerald-950/30 border-emerald-500/60 ring-1 ring-emerald-500/30 shadow-lg shadow-emerald-950/40'
+                              : 'bg-slate-900/80 border-slate-800'
+                          }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-slate-400">Feed #{idx + 1}</span>
+                            <span className={`text-xs ${feed.isNext ? 'text-emerald-300 font-semibold' : 'text-slate-400'}`}>
+                              {feed.isNext ? 'Next Feed (#1)' : `Feed #${idx + 1}`}
+                            </span>
                             <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded font-medium">
                               {cocoDurationSec}s drip
                             </span>
@@ -989,11 +1082,122 @@ export function App() {
                           <div className="text-lg font-bold text-white tracking-tight">
                             {feed.timeStr}
                           </div>
-                          <div className="text-[11px] text-slate-500">{feed.relStr}</div>
+                          <div className={`text-[11px] font-mono ${feed.isNext ? 'text-emerald-400 font-medium' : 'text-slate-500'}`}>
+                            {feed.relStr}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  {/* Schedule Next Feed Modal */}
+                  {showScheduleModal && (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md w-full space-y-4 shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-emerald-400" />
+                            Schedule Next Feeding
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => setShowScheduleModal(false)}
+                            className="text-slate-400 hover:text-white text-sm"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <p className="text-xs text-slate-400">
+                          Set when the next watering cycle will run. All subsequent waterings will automatically follow your every <strong className="text-slate-200">{cocoIntervalHours}-hour</strong> schedule from that time.
+                        </p>
+
+                        {/* Quick Presets */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-slate-300 block">
+                            Quick Delay Presets
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleNextCycle(15 * 60)}
+                              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 font-medium transition"
+                            >
+                              In 15m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleNextCycle(30 * 60)}
+                              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 font-medium transition"
+                            >
+                              In 30m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleNextCycle(60 * 60)}
+                              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 font-medium transition"
+                            >
+                              In 1h
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleNextCycle(2 * 60 * 60)}
+                              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 font-medium transition"
+                            >
+                              In 2h
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Custom Time of Day */}
+                        <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                          <label className="text-xs font-semibold text-slate-300 block">
+                            Or Set Specific Time Today / Tomorrow
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="time"
+                              value={customFeedTime}
+                              onChange={(e) => setCustomFeedTime(e.target.value)}
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleSpecificTime(customFeedTime)}
+                              disabled={!customFeedTime}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-medium text-xs rounded-xl transition"
+                            >
+                              Apply Time
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            If the time selected is earlier than right now, it will be scheduled for tomorrow.
+                          </p>
+                        </div>
+
+                        {/* Immediate Action */}
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleTriggerFeedNow();
+                              setShowScheduleModal(false);
+                            }}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
+                          >
+                            ⚡ Or Start Watering Right Now
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowScheduleModal(false)}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Fertigation Cycle Sequence */}
                   <div>

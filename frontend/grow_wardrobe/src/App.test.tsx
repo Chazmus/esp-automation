@@ -92,7 +92,9 @@ describe('Grow Wardrobe Frontend', () => {
 
     // Default is Coco Coir
     expect(screen.getByText(/Feed Interval \(Hours\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Estimated Upcoming Feedings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fertigation Schedule/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Water Now/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Schedule Next Feed/i })).toBeInTheDocument();
     expect(screen.queryByText(/Soil Moisture Dynamics/i)).not.toBeInTheDocument();
 
     // Switch to Organic Soil
@@ -106,6 +108,41 @@ describe('Grow Wardrobe Frontend', () => {
     expect(screen.getByText(/Soil Moisture Dynamics/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Soak Cooldown/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Safety Runoff Cutoff/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('triggers immediate watering and schedules next cycle via MQTT', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Water Now/i })).toBeInTheDocument();
+    });
+
+    // Test Water Now
+    const waterNowBtn = screen.getByRole('button', { name: /Water Now/i });
+    await user.click(waterNowBtn);
+
+    expect(ha.sendMqttCommand).toHaveBeenCalledWith(
+      mockConn,
+      'wardrobe/irrigation/next_cycle/set',
+      '0'
+    );
+
+    // Open Schedule Next Feed modal
+    const scheduleBtn = screen.getByRole('button', { name: /Schedule Next Feed/i });
+    await user.click(scheduleBtn);
+
+    expect(screen.getByText(/Schedule Next Feeding/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /In 30m/i })).toBeInTheDocument();
+
+    // Click In 30m
+    await user.click(screen.getByRole('button', { name: /In 30m/i }));
+
+    expect(ha.sendMqttCommand).toHaveBeenCalledWith(
+      mockConn,
+      'wardrobe/irrigation/next_cycle/set',
+      '1800'
+    );
   });
 
   it('dispatches correct MQTT command contract when applying Coco strategy', async () => {

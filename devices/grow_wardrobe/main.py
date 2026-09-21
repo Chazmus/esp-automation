@@ -116,6 +116,28 @@ def mqtt_callback(topic, msg):
         waste_relay.on() if msg == "ON" else waste_relay.off()
         pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
 
+    elif topic.endswith("irrigation/next_cycle/set"):
+        try:
+            delay_secs = None
+            if msg.startswith("{"):
+                data = json.loads(msg)
+                delay_secs = data.get("delay_seconds")
+            else:
+                delay_secs = float(msg)
+
+            if delay_secs is not None:
+                irrig_controller.schedule_next_cycle(delay_seconds=float(delay_secs))
+                if irrig_mode == "MANUAL":
+                    irrig_mode = "AUTO"
+                    pub(client, "irrigation/mode/state", "AUTO", retain=True)
+                    print("Switched Irrigation to AUTO for scheduled cycle.")
+
+                rem = irrig_controller.get_next_cycle_in_seconds()
+                pub(client, "irrigation/next_cycle/state", str(rem), retain=True)
+                print(f"💧 Scheduled next cycle in {delay_secs}s (remaining: {rem}s)")
+        except Exception as e:
+            print(f"⚠️ Error scheduling next cycle: {e}")
+
     # -- Dynamic Grow Configuration --
     elif "/config/" in topic and topic.endswith("/set"):
         parts = topic.split("/")
@@ -235,6 +257,12 @@ if wifi.connect():
 
                     if hasattr(vpd_controller, 'last_reason') and vpd_controller.last_reason:
                         telemetry["fan_reason"] = vpd_controller.last_reason
+
+                    if irrig_controller is not None:
+                        next_sec = irrig_controller.get_next_cycle_in_seconds()
+                        telemetry["next_feed_seconds"] = next_sec
+                        telemetry["irrigation_state"] = irrig_controller.state
+                        pub(client, "irrigation/next_cycle/state", str(next_sec), retain=True)
 
                     if telemetry:
                         payload_json = json.dumps(telemetry)
