@@ -158,6 +158,7 @@ def mqtt_callback(topic, msg):
                 "soil_soak_wait": ("soil_soak_wait_mins", float),
                 "soil_soak_wait_mins": ("soil_soak_wait_mins", float),
                 "light_preset": ("light_preset", str),
+                "light_start_time": ("light_start_time", str),
             }
             if param in key_map:
                 store_key, conv = key_map[param]

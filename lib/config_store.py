@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     "soil_max_water_secs": 60,
     "soil_soak_wait_mins": 60,
     "light_preset": "18/6",
+    "light_start_time": "06:00",
 }
 
 class ConfigStore:

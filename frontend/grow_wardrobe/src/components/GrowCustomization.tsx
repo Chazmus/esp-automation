@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import type { GrowMedium, LightPreset } from '../types';
+import { PhotoperiodSchedule } from './PhotoperiodSchedule';
 
 interface GrowCustomizationProps {
   growMedium: GrowMedium;
@@ -28,6 +29,8 @@ interface GrowCustomizationProps {
   setSoilMaxWaterSec: (val: number) => void;
   lightPreset: LightPreset;
   setLightPreset: (val: LightPreset) => void;
+  lightStartTime: string;
+  setLightStartTime: (val: string) => void;
   potMoisture: string;
   irrigationPhase: string;
   nextFeedTargetTimestamp: number | null;
@@ -56,6 +59,8 @@ export function GrowCustomization({
   setSoilMaxWaterSec,
   lightPreset,
   setLightPreset,
+  lightStartTime,
+  setLightStartTime,
   potMoisture,
   irrigationPhase,
   nextFeedTargetTimestamp,
@@ -627,6 +632,14 @@ export function GrowCustomization({
             </button>
           ))}
         </div>
+
+        {/* Visual 24-Hour Photoperiod Timeline Graphic */}
+        <PhotoperiodSchedule
+          preset={lightPreset}
+          startTime={lightStartTime}
+          onStartTimeChange={setLightStartTime}
+          disabled={!isConnected}
+        />
       </div>
 
       {/* Save Button */}

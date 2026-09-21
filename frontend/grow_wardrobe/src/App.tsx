@@ -36,6 +36,7 @@ export function App() {
   const [soilMaxWaterSec, setSoilMaxWaterSec] = useState(60);
   const [soilSoakWaitMin, setSoilSoakWaitMin] = useState(60);
   const [lightPreset, setLightPreset] = useState<LightPreset>('18/6');
+  const [lightStartTime, setLightStartTime] = useState('06:00');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Next Cycle Scheduling State
@@ -88,6 +89,10 @@ export function App() {
           } else if (param === 'light_preset') {
             if (val === '18/6' || val === '12/12' || val === '24/0') {
               setLightPreset(val);
+            }
+          } else if (param === 'light_start_time') {
+            if (typeof val === 'string' && val.includes(':')) {
+              setLightStartTime(val);
             }
           }
         }).catch((err) => {
@@ -223,6 +228,7 @@ export function App() {
       await sendMqttCommand(connection, 'wardrobe/config/soil_soak_wait/set', String(soilSoakWaitMin));
     }
     await sendMqttCommand(connection, 'wardrobe/config/light_preset/set', lightPreset);
+    await sendMqttCommand(connection, 'wardrobe/config/light_start_time/set', lightStartTime);
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -267,6 +273,8 @@ export function App() {
             setSoilMaxWaterSec={setSoilMaxWaterSec}
             lightPreset={lightPreset}
             setLightPreset={setLightPreset}
+            lightStartTime={lightStartTime}
+            setLightStartTime={setLightStartTime}
             potMoisture={environmentMetrics.pot.moisture ?? '--'}
             irrigationPhase={irrigationPhase}
             nextFeedTargetTimestamp={nextFeedTargetTimestamp}

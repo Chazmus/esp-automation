@@ -161,6 +161,7 @@ describe('Grow Wardrobe Frontend', () => {
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/coco_interval/set', '4');
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/coco_duration/set', '25');
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/light_preset/set', '18/6');
+    expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/light_start_time/set', '06:00');
   });
 
   it('dispatches correct MQTT command contract when applying Soil strategy', async () => {
@@ -182,6 +183,8 @@ describe('Grow Wardrobe Frontend', () => {
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/soil_trigger/set', '28');
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/soil_max_water/set', '60');
     expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/soil_soak_wait/set', '60');
+    expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/light_preset/set', '18/6');
+    expect(ha.sendMqttCommand).toHaveBeenCalledWith(mockConn, 'wardrobe/config/light_start_time/set', '06:00');
   });
 
   it('enforces safety guard on fan slider when in AUTO mode', async () => {
@@ -209,5 +212,17 @@ describe('Grow Wardrobe Frontend', () => {
     await user.click(screen.getByText(/Forest Dark/i));
     expect(document.documentElement.getAttribute('data-theme')).toBe('forest');
     expect(localStorage.getItem('grow_wardrobe_theme')).toBe('forest');
+  });
+
+  it('renders photoperiod schedule timeline with active on/off times', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/24-Hour Photoperiod Schedule/i)).toBeInTheDocument();
+      expect(screen.getByText(/Lights ON Time/i)).toBeInTheDocument();
+      expect(screen.getByText(/Lights OFF Time/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/06:00/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/00:00/i).length).toBeGreaterThanOrEqual(1);
+    });
   });
 });
