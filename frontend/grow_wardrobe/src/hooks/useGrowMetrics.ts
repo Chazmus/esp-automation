@@ -72,6 +72,7 @@ export function useGrowMetrics(entities: HassEntities) {
   const lightState = getState('switch.grow_light') === 'on';
   const dripPumpState = getState('switch.drip_pump') === 'on';
   const agitationPumpState = getState('switch.agitation_pump') === 'on';
+  const wastePumpState = getState('switch.waste_pump') === 'on';
   const fanReason = getState('sensor.esp32_growdrobe_ventilation_reason', getState('sensor.ventilation_reason'));
 
   // Fan Dynamics & Airflow Physics Engine
@@ -208,6 +209,7 @@ export function useGrowMetrics(entities: HassEntities) {
       lightState,
       dripPumpState,
       agitationPumpState,
+      wastePumpState,
     },
   };
 }

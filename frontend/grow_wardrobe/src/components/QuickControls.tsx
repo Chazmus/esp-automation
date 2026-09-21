@@ -1,34 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sun, Droplets, RefreshCw } from 'lucide-react';
+import { Droplets, RefreshCw, Waves } from 'lucide-react';
 
 interface QuickControlsProps {
   ventMode: string;
   irrMode: string;
   fanSpeed: string;
-  lightState: boolean;
   dripPumpState: boolean;
   agitationPumpState: boolean;
+  wastePumpState: boolean;
   onToggleVentMode: () => void;
   onToggleIrrMode: () => void;
   onFanSpeedChange: (val: number) => void;
-  onToggleLight: () => void;
   onToggleDripPump: () => void;
   onToggleAgitationPump: () => void;
+  onToggleWastePump: () => void;
 }
 
 export function QuickControls({
   ventMode,
   irrMode,
   fanSpeed,
-  lightState,
   dripPumpState,
   agitationPumpState,
+  wastePumpState,
   onToggleVentMode,
   onToggleIrrMode,
   onFanSpeedChange,
-  onToggleLight,
   onToggleDripPump,
   onToggleAgitationPump,
+  onToggleWastePump,
 }: QuickControlsProps) {
   // Optimistic local state for instantaneous 0ms slider feedback
   const [localSpeed, setLocalSpeed] = useState<number>(Number(fanSpeed) || 0);
@@ -146,24 +146,8 @@ export function QuickControls({
         )}
       </div>
 
-      {/* Relays */}
+      {/* Hardware Relays */}
       <div className="space-y-2">
-        <button
-          type="button"
-          onClick={onToggleLight}
-          className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-medium transition ${
-            lightState
-              ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
-              : 'bg-theme-surface border-theme-border text-theme-text-muted hover:border-theme-border-elevated'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Sun className="w-4 h-4" />
-            <span>Grow Light</span>
-          </div>
-          <span>{lightState ? 'ON' : 'OFF'}</span>
-        </button>
-
         <button
           type="button"
           onClick={onToggleDripPump}
@@ -194,6 +178,22 @@ export function QuickControls({
             <span>Agitation Pump</span>
           </div>
           <span>{agitationPumpState ? 'RUNNING' : 'OFF'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleWastePump}
+          className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-medium transition ${
+            wastePumpState
+              ? 'bg-indigo-500/15 border-indigo-500/50 text-indigo-300'
+              : 'bg-theme-surface border-theme-border text-theme-text-muted hover:border-theme-border-elevated'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <Waves className="w-4 h-4" />
+            <span>Waste Water Vacuum</span>
+          </div>
+          <span>{wastePumpState ? 'RUNNING' : 'OFF'}</span>
         </button>
       </div>
     </section>

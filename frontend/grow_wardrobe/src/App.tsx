@@ -132,10 +132,10 @@ export function App() {
   }, [haConfig.url, haConfig.token]);
 
   // Actuator Handlers
-  const handleToggleLight = async () => {
+  const handleToggleWastePump = async () => {
     if (!connection) return;
-    const service = controls.lightState ? 'turn_off' : 'turn_on';
-    await setEntityState(connection, 'switch', service, 'switch.grow_light');
+    const service = controls.wastePumpState ? 'turn_off' : 'turn_on';
+    await setEntityState(connection, 'switch', service, 'switch.waste_pump');
   };
 
   const handleToggleDripPump = async () => {
@@ -282,15 +282,15 @@ export function App() {
             ventMode={controls.ventMode}
             irrMode={controls.irrMode}
             fanSpeed={controls.fanSpeed}
-            lightState={controls.lightState}
             dripPumpState={controls.dripPumpState}
             agitationPumpState={controls.agitationPumpState}
+            wastePumpState={controls.wastePumpState}
             onToggleVentMode={handleToggleVentMode}
             onToggleIrrMode={handleToggleIrrMode}
             onFanSpeedChange={handleFanSpeedChange}
-            onToggleLight={handleToggleLight}
             onToggleDripPump={handleToggleDripPump}
             onToggleAgitationPump={handleToggleAgitationPump}
+            onToggleWastePump={handleToggleWastePump}
           />
         </div>
 

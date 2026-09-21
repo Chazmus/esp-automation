@@ -41,6 +41,7 @@ describe('Grow Wardrobe Frontend', () => {
           'switch.grow_light': { state: 'off' },
           'switch.drip_pump': { state: 'off' },
           'switch.agitation_pump': { state: 'off' },
+          'switch.waste_pump': { state: 'off' },
         });
       }, 0);
 
