@@ -157,10 +157,18 @@ class IrrigationController:
             self.last_cycle_start = current_time - self.cycle_interval_ms
 
     def get_next_cycle_in_seconds(self):
-        """Returns remaining seconds until the next cycle starts (0 if currently active or overdue)."""
-        if self.state != IrrigationState.IDLE:
-            return 0
+        """Returns remaining seconds until the next cycle starts."""
         current_time = time.ticks_ms()
         time_since = time.ticks_diff(current_time, self.last_cycle_start)
         remaining_ms = self.cycle_interval_ms - time_since
         return max(0, int(remaining_ms / 1000))
+
+    def get_state_name(self):
+        names = {
+            IrrigationState.IDLE: "IDLE",
+            IrrigationState.AGITATING: "AGITATING",
+            IrrigationState.IRRIGATING: "IRRIGATING",
+            IrrigationState.WAITING_TO_DRAIN: "WAITING_TO_DRAIN",
+            IrrigationState.DRAINING: "DRAINING",
+        }
+        return names.get(self.state, "UNKNOWN")

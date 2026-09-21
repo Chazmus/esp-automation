@@ -262,7 +262,9 @@ if wifi.connect():
                         next_sec = irrig_controller.get_next_cycle_in_seconds()
                         telemetry["next_feed_seconds"] = next_sec
                         telemetry["irrigation_state"] = irrig_controller.state
+                        telemetry["irrigation_phase"] = irrig_controller.get_state_name()
                         pub(client, "irrigation/next_cycle/state", str(next_sec), retain=True)
+                        pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
 
                     if telemetry:
                         payload_json = json.dumps(telemetry)
@@ -277,6 +279,7 @@ if wifi.connect():
                     pub(client, "irrigation/drip/state", "ON" if drip_relay.is_on() else "OFF")
                     pub(client, "irrigation/agitate/state", "ON" if agitate_relay.is_on() else "OFF")
                     pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
+                    pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
                     
             time.sleep(0.1) # Yield to RTOS
             

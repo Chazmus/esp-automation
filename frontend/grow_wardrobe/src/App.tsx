@@ -51,23 +51,25 @@ export function App() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Next Cycle Scheduling State
-  const [nextFeedSeconds, setNextFeedSeconds] = useState<number | null>(null);
+  const [nextFeedTargetTimestamp, setNextFeedTargetTimestamp] = useState<number | null>(null);
+  const [irrigationPhase, setIrrigationPhase] = useState<string>('IDLE');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [customFeedTime, setCustomFeedTime] = useState('');
 
   // Helper to calculate upcoming feedings based on scheduled next cycle
-  const getScheduledFeedings = (intervalHours: number, nextSec: number | null, count = 3) => {
+  const getScheduledFeedings = (intervalHours: number, targetTimestamp: number | null, count = 3) => {
     const now = Date.now();
-    const baseTime = nextSec !== null ? now + nextSec * 1000 : now + intervalHours * 3600 * 1000;
+    // Anchor to fixed target timestamp, or default to interval from now
+    const baseTime = targetTimestamp !== null ? targetTimestamp : now + intervalHours * 3600 * 1000;
     const feeds: { timeStr: string; relStr: string; isNext: boolean }[] = [];
     for (let i = 0; i < count; i++) {
       const feedTime = new Date(baseTime + i * intervalHours * 3600 * 1000);
       const hours = String(feedTime.getHours()).padStart(2, '0');
       const mins = String(feedTime.getMinutes()).padStart(2, '0');
-      const diffMinutes = Math.max(0, Math.round((feedTime.getTime() - now) / (60 * 1000)));
+      const diffMinutes = Math.round((feedTime.getTime() - now) / (60 * 1000));
       let relStr = '';
-      if (diffMinutes < 1) {
-        relStr = 'imminent / now';
+      if (diffMinutes <= 0) {
+        relStr = 'imminent / due now';
       } else if (diffMinutes < 60) {
         relStr = `in ~${diffMinutes} mins`;
       } else {
@@ -135,11 +137,27 @@ export function App() {
         // Subscribe to next cycle countdown state from the ESP32
         subscribeMqttTopic(conn, 'wardrobe/irrigation/next_cycle/state', (msg) => {
           const sec = Number(msg.payload);
-          if (!isNaN(sec)) {
-            setNextFeedSeconds(sec);
+          if (!isNaN(sec) && sec > 0) {
+            const incomingTarget = Date.now() + sec * 1000;
+            setNextFeedTargetTimestamp((prev) => {
+              if (!prev) return incomingTarget;
+              const diff = Math.abs(prev - incomingTarget);
+              // Only adjust if incoming target differs by more than 45 seconds to prevent 1s jitter drift
+              if (diff > 45000) {
+                return incomingTarget;
+              }
+              return prev;
+            });
           }
         }).catch((err) => {
           console.warn('MQTT next_cycle subscription error:', err);
+        });
+
+        // Subscribe to irrigation phase
+        subscribeMqttTopic(conn, 'wardrobe/irrigation/phase/state', (msg) => {
+          setIrrigationPhase(msg.payload.toUpperCase());
+        }).catch((err) => {
+          console.warn('MQTT phase subscription error:', err);
         });
       })
       .catch((err) => {
@@ -362,7 +380,8 @@ export function App() {
       });
     }
     await sendMqttCommand(connection, 'wardrobe/irrigation/next_cycle/set', '0');
-    setNextFeedSeconds(0);
+    // Anchor next scheduled feed to current time + interval
+    setNextFeedTargetTimestamp(Date.now() + cocoIntervalHours * 3600 * 1000);
   };
 
   const handleScheduleNextCycle = async (delaySeconds: number) => {
@@ -373,7 +392,7 @@ export function App() {
       });
     }
     await sendMqttCommand(connection, 'wardrobe/irrigation/next_cycle/set', String(delaySeconds));
-    setNextFeedSeconds(delaySeconds);
+    setNextFeedTargetTimestamp(Date.now() + delaySeconds * 1000);
     setShowScheduleModal(false);
   };
 
@@ -1061,8 +1080,23 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* Active Cycle Status Banner */}
+                    {irrigationPhase !== 'IDLE' && (
+                      <div className="p-3 bg-blue-950/40 border border-blue-800/80 rounded-xl flex items-center justify-between text-xs mb-3 animate-pulse">
+                        <div className="flex items-center gap-2">
+                          <Droplets className="w-4 h-4 text-blue-400" />
+                          <span className="text-white font-medium">
+                            Cycle In Progress: <span className="text-blue-300 font-bold">{irrigationPhase}</span>
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-blue-300 bg-blue-900/50 px-2 py-0.5 rounded-full border border-blue-700">
+                          Active Relay Output
+                        </span>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {getScheduledFeedings(cocoIntervalHours, nextFeedSeconds).map((feed, idx) => (
+                      {getScheduledFeedings(cocoIntervalHours, nextFeedTargetTimestamp).map((feed, idx) => (
                         <div
                           key={idx}
                           className={`p-3 rounded-xl flex flex-col gap-1 relative overflow-hidden border transition ${
