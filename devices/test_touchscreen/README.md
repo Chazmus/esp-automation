@@ -70,4 +70,4 @@ Due to the limited number of GPIO pins on the ESP32-C3 Super Mini, the SPI bus i
    To calibrate your resistive screen:
    - Tap the top-left corner and note down the raw coordinates.
    - Tap the bottom-right corner and note down the raw coordinates.
-   - Adjust `calibration.x_min`, `calibration.x_max`, `calibration.y_min`, and `calibration.y_max` in [test_touchscreen.yaml](file:///home/chaz_bailey/workspace/esp-automation/devices/test_touchscreen/esphome/test_touchscreen.yaml) accordingly.
+   - Adjust `calibration.x_min`, `calibration.x_max`, `calibration.y_min`, and `calibration.y_max` in [test_touchscreen.yaml](esphome/test_touchscreen.yaml) accordingly.

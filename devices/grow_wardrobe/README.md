@@ -110,49 +110,88 @@ To run all items from a single **12V power supply**, the power distribution and 
 ## 📐 System Logic & Control Algorithms
 
 ### 1. Ventilation Control (Noctua PWM Fan)
-The fan speed is modulated using a 25 kHz PWM signal. The duty cycle is dynamically updated based on the 3 temperature/humidity readings:
-*   **Canopy Sensor**: Primary feedback loop. Keeps canopy temperatures in the optimal range (e.g., 22°C - 26°C) and relative humidity controlled.
-*   **Pot Sensor**: Secondary feedback loop. Detects microclimates at the soil/pot surface. Large deviations between pot and canopy temperatures indicate poor airflow.
-*   **Ambient Intake Sensor**: Feedforward input. If the room housing the wardrobe is hot/humid, raising fan speed may be counterproductive. The controller uses the ambient readings to determine the theoretical minimum temperature/humidity achievable by venting and adjusts accordingly.
-*   *Algorithm*: (TBD) Will likely be a proportional-integral (PI) control loop or a lookup table evaluating the differential: $\Delta T = T_{\text{Canopy}} - T_{\text{Ambient}}$.
+The extraction fan speed is modulated using a 25 kHz PWM signal from the ESP32-C3 (`lib/drivers/fan.py`).
+- **Operating Modes**: Strictly `AUTO` and `MANUAL` (no `DRY` mode).
+- **AUTO Mode (VPD PI Controller)**:
+  - Driven by the closed-loop controller in [`lib/controllers/vpd.py`](../../lib/controllers/vpd.py).
+  - Calculates real-time leaf Vapor Pressure Deficit (VPD) from the Canopy AHT20 sensor.
+  - Dynamically modulates fan duty cycle using proportional and integral terms to hold canopy VPD at target (default: 1.1 kPa).
+  - **Ambient Differentials**: Evaluates $\Delta T = T_{\text{Canopy}} - T_{\text{Ambient}}$ and $\Delta RH$. If ambient air is unfavorable (too hot or saturated), venting is throttled to prevent worsening canopy climate.
+- **MANUAL Mode**: Direct fan speed control from 10% to 100% via MQTT or the dashboard slider.
 
-### 2. Grow Light Schedule (Smart Plug)
-*   **Control**: The grow light is controlled via an external smart plug (e.g., Zigbee/Tasmota/Shelly smart plug) inside Home Assistant. This avoids the danger of switching 240V AC mains voltage via the controller's onboard mechanical relays.
-*   **Status**: Active. The smart plug operates on a strict schedule managed by Home Assistant (e.g., 18/6 light cycle for vegetative stage, 12/12 for flowering). In the future, the ESP32-C3 might read from or interact with the smart plug's state via Home Assistant's API or MQTT.
+### 2. Grow Light Schedule & Photoperiod Tracking
+- **Physical Switching**: Controlled via an external smart plug (e.g. Zigbee/Shelly) in Home Assistant to ensure 240V AC mains isolation from low-voltage DC electronics.
+- **Photoperiod Configuration**:
+  - Presets: `18/6` (Vegetative), `12/12` (Flowering), `24/0` (Continuous).
+  - Start Time: Configurable light start time (e.g. `06:00`), persisted in the ESP32 flash (`config_store.json`).
+  - The dashboard displays a 24-hour photoperiod timeline graphic with live transition countdowns.
 
-### 3. Irrigation System (Fresh Reservoir)
-*   **Agitation Pump**: Runs on a scheduled timer (e.g., 2 minutes every hour, or for 5 minutes immediately prior to an irrigation event) to prevent concentrated liquid nutrients from settling out of suspension while avoiding heating the water.
-*   **Irrigation Pump**: Runs on a strict interval timer.
-    *   *Default Schedule*: 15 seconds every 4 hours (adjustable based on plant size).
-    *   *Volume Target*: Calculated to supply enough water to saturate the coco coir and yield a ~10-20% runoff volume.
-*   **Soil Moisture Sensor (HW-390)**:
-    *   Acts as a **telemetry monitor and failsafe**.
-    *   *Safety Failsafe*: If soil moisture dips below a critical threshold (e.g., <15% for coco coir) and stays dry for more than 30 minutes, the system publishes a high-priority warning to Home Assistant. Optionally, it can trigger an emergency short watering cycle or lock out further watering if a pump failure is suspected.
+### 3. Dual-Medium Irrigation System
+Powered by [`lib/controllers/irrigation.py`](../../lib/controllers/irrigation.py):
+- **Coco Coir Strategy (High-Frequency Fertigation)**:
+  - Runs on a timed interval (default: every 4 hours, configurable 1–24h).
+  - 4-Phase Automated Sequence:
+    1. **Agitate** (5 mins): Runs Relay Ch 3 to aerate and mix nutrient solution.
+    2. **Drip Feed** (configurable, e.g. 25 secs): Runs Relay Ch 1 to deliver fresh solution to drip ring.
+    3. **Drain Wait** (10 mins): Pauses pumps to let water saturate coco and collect in drip tray.
+    4. **Runoff Drain** (60 secs): Runs Relay Ch 2 diaphragm pump to vacuum runoff into waste bucket.
+- **Organic Soil Strategy (Closed-Loop Demand)**:
+  - Continuously monitors capacitive soil moisture (HW-390).
+  - **Water Trigger Threshold**: Starts watering when soil drops to or below threshold (e.g. 28%).
+  - **Target Moisture Level**: Goal moisture level (e.g. 45%).
+  - **Soak Cooldown**: Enforces a mandatory delay (e.g. 60 mins) after watering to let water disperse through root zone before re-evaluating.
+  - **Safety Max Water Cutoff**: Hardware safety timeout (e.g. 60 secs) prevents runaway watering if sensor disconnects.
 
-### 4. Runoff Drainage System (Waste Bucket)
-*   **Drip Tray & Elevator**: The fabric pot is suspended above the drip tray on a plastic elevator, preventing the root zone from sitting in stagnant, salty runoff water.
-*   **Runoff Diaphragm Pump**: Positioned to draw water from the lowest point of the angled drip tray.
-*   **Schedule & Offset**:
-    *   Draining must occur after watering.
-    *   *Offset Delay*: Runs **10 minutes after** the irrigation pump completes, allowing water to fully saturate the coco coir and drain out of the bottom of the pot.
-    *   *Duration*: Runs for a fixed duration (e.g., 60 seconds) to ensure the line is sucked dry and the drip tray is clear.
+---
+
+## 📡 MQTT Integration & Home Assistant
+
+The ESP32-C3 connects to Mosquitto MQTT under the base topic `wardrobe/` (Client ID: `esp32_growdrobe`).
+
+### Retain Conventions
+- **State topics (`.../state`) MUST have `retain=True`**: Ensures reconnecting clients and Home Assistant immediately receive current states.
+- **Command topics (`.../set`, `.../trigger`) MUST have `retain=False`**: Prevents stale commands from being replayed on reboot.
+
+### Key MQTT Topics
+| Topic | Type | Payload / Values |
+| :--- | :--- | :--- |
+| `wardrobe/ventilation/mode/state` / `.../set` | State / Command | `AUTO`, `MANUAL` |
+| `wardrobe/ventilation/fan/state` / `.../set` | State / Command | `10` – `100` |
+| `wardrobe/irrigation/mode/state` / `.../set` | State / Command | `AUTO`, `MANUAL` |
+| `wardrobe/irrigation/state` / `.../trigger` | State / Command | `IDLE`, `AGITATE`, `WATER`, `DRAIN`, `EMERGENCY_STOP` |
+| `wardrobe/config/grow_medium/state` / `.../set` | State / Command | `coco`, `soil` |
+| `wardrobe/config/light_preset/state` / `.../set` | State / Command | `18/6`, `12/12`, `24/0` |
+| `wardrobe/config/light_start_time/state` / `.../set` | State / Command | `HH:MM` (e.g. `06:00`) |
+
+---
+
+## 🚀 Flashing & Deployment
+
+### 1. Remote WebREPL Deployment (Over WiFi)
+To flash without a USB cable (uses configured `DEVICE_IP` in `devices/grow_wardrobe/config.py`):
+```bash
+python3 scripts/deploy.py grow_wardrobe --remote
+```
+The deployer syncs all shared libraries to `/lib`, syncs device files to `/`, and soft-resets the MCU.
+
+### 2. Local USB Deployment
+With the ESP32 connected via USB:
+```bash
+python3 scripts/deploy.py grow_wardrobe
+```
 
 ---
 
 ## ⚠️ Safety, Failsafes & Reliability Controls
 
-To prevent water damage, pump burn-outs, or crop loss, the following failsafes are integrated into the design:
-
-1.  **Inductive Kickback & Contact Protection**: Although the opto-isolated relay board protects the ESP32's digital pins from high-voltage spikes, turning off inductive pump motors still causes arcing (sparks) across the relay's mechanical contacts. Soldering a **flyback diode (1N4007)** in parallel across each pump's motor terminals is still highly recommended to prevent arcing (which degrades and pits the relay contacts over time) and to suppress high-frequency electromagnetic interference (EMI) that can cause the ESP32 to freeze.
-2.  **Dry-Run Pump Protection**: Submersible and diaphragm pumps can burn out if run dry for extended periods. The firmware enforces maximum run times (e.g., irrigation pump cannot run for >45 seconds continuously; runoff pump cannot run for >3 minutes continuously).
-3.  **Runoff Waste Bucket Level Switch (Crucial Addition)**: If the waste bucket fills up, runoff water will overflow onto the floor. Installing a simple **float switch** in the lid of the 10L waste bucket wired to an ESP32 GPIO allows the controller to immediately disable irrigation and sound an alarm if the bucket is full.
-4.  **Hardware Watchdog Timer (WDT)**: ESP32-C3 firmware may lock up due to WiFi drops or electrical noise. Enabling a hardware watchdog timer in MicroPython (`machine.WDT`) ensures that if the system hangs, it will automatically reboot within 10-15 seconds rather than leaving a pump stuck in the "ON" state.
+1. **Inductive Kickback & Contact Protection**: Opto-isolated relays protect GPIOs. Flyback diodes across 12V pump terminals suppress inductive spikes and EMI.
+2. **Dry-Run & Runaway Pump Protection**: Strict maximum run times enforced in firmware (e.g. max 60–120s for drip pump).
+3. **Hardware Watchdog Timer (WDT)**: If the MicroPython loop locks up, the hardware watchdog reboots the MCU within 10–15 seconds, ensuring no relay is left energized.
 
 ---
 
 ## 🖥️ Companion Devices & Dashboards
 
-The Grow Wardrobe system integrates with several companion modules to provide complete local display control and video monitoring:
-
-1. **[Wardrobe Touchscreen Control Panel](file:///home/chaz_bailey/workspace/esp-automation/devices/wardrobe_touchscreen/README.md)**: A dedicated 2.8" color touchscreen dashboard powered by an ESP32-C3 Super Mini running ESPHome. It connects directly to Home Assistant to display ambient temp/humidity and soil moisture, and provides interactive toggle buttons to control the wardrobe lights and ventilation fans.
-2. **[Wardrobe Camera Node](file:///home/chaz_bailey/workspace/esp-automation/devices/wardrobe_camera/README.md)**: An ESP32-CAM module mounted inside the wardrobe. It streams live JPEG video and captures high-resolution pictures for time-lapse generation of plant growth.
+1. **[Grow Wardrobe Web Dashboard](../../frontend/grow_wardrobe/README.md)**: Modern React/Tailwind web app deployed directly to Home Assistant Lovelace for real-time telemetry, fan dynamics, irrigation scheduling, and photoperiod visualization.
+2. **[Wardrobe Touchscreen Control Panel](../wardrobe_touchscreen/README.md)**: Dedicated 2.8" SPI touchscreen powered by ESP32-C3 Super Mini running ESPHome.
+3. **[Wardrobe Camera Node](../wardrobe_camera/README.md)**: ESP32-CAM module streaming live JPEG video and driving automated growth timelapse captures.

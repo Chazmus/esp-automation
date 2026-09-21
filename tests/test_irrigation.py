@@ -204,15 +204,17 @@ def test_schedule_next_cycle():
     cfg = {"medium": "COCO", "coco_interval_hours": 4}
     controller = IrrigationController(irrig, agitate, waste, cfg)
 
-    # Schedule next cycle in 1800 seconds (30 mins)
-    controller.schedule_next_cycle(delay_seconds=1800)
-    remaining = controller.get_next_cycle_in_seconds()
-    assert 1790 <= remaining <= 1810
+    with patch("time.ticks_diff", side_effect=lambda a, b: a - b):
+        with patch("time.ticks_ms", side_effect=lambda: int(time.time() * 1000)):
+            # Schedule next cycle in 1800 seconds (30 mins)
+            controller.schedule_next_cycle(delay_seconds=1800)
+            remaining = controller.get_next_cycle_in_seconds()
+            assert 1790 <= remaining <= 1810
 
-    # Schedule next cycle now (0 seconds)
-    controller.schedule_next_cycle(delay_seconds=0)
-    assert controller.get_next_cycle_in_seconds() == 0
-    # Next evaluate() should start the cycle
-    log = controller.evaluate()
-    assert log == "Started Agitation"
-    assert controller.state == IrrigationState.AGITATING
+            # Schedule next cycle now (0 seconds)
+            controller.schedule_next_cycle(delay_seconds=0)
+            assert controller.get_next_cycle_in_seconds() == 0
+            # Next evaluate() should start the cycle
+            log = controller.evaluate()
+            assert log == "Started Agitation"
+            assert controller.state == IrrigationState.AGITATING

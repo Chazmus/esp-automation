@@ -1,62 +1,78 @@
 # ESP32-C3 MicroPython Fleet Development Guide
 
-Welcome to your modular, multi-board MicroPython workspace! This project is organized using a **Modular, Config-Driven Architecture (Approach 2 + 3)**.
+Welcome to your modular, multi-board MicroPython workspace! This project is organized using a **Modular, Config-Driven Architecture**.
 
-Instead of maintaining duplicated loops and helper logic on each device, all execution logic, driver communication, WiFi management, and Home Assistant synchronization are housed in the shared core library ([lib/](file:///home/cbailey/workspace/esp-automation/lib/)). Individual devices under `devices/` are defined purely by configuration parameters in a `config.py` file, keeping the target scripts clean and maintainable.
+Instead of maintaining duplicated loops and helper logic on each device, all execution logic, driver communication, WiFi management, and Home Assistant synchronization are housed in the shared core library ([lib/](lib/)). Individual devices under [devices/](devices/) are defined by device-specific configurations (`config.py`), boot scripts (`boot.py`), and runtimes (`main.py`), keeping code clean and maintainable.
 
 ---
 
 ## 1. Physical Device Wiring Diagrams
 
-### Device 1: Temperature & Humidity Sensor (AHT20)
-Uses **I2C communication** on default pins:
+### Grow Wardrobe Controller (`grow_wardrobe`)
+The controller coordinates multi-zone environmental sensing, closed-loop PWM ventilation, and a 3-pump irrigation/drainage system.
 
-| AHT20 Sensor Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
-| :--- | :--- | :--- | :--- |
-| **VIN / VCC** | Red | **3.3V** | Power supply (do not use 5V) |
-| **GND** | Black | **GND** | Ground |
-| **SDA** (Serial Data) | Yellow | **GPIO 5** | I2C Serial Data line |
-| **SCL** (Serial Clock)| White | **GPIO 6** | I2C Serial Clock line |
+#### A. Environmental Sensors (I2C / SoftI2C)
+Since AHT20 sensors share a fixed I2C address (`0x38`), three independent SoftI2C buses are configured:
 
----
+| Sensor Zone | Sensor Type | SDA Pin | SCL Pin | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Canopy** | AHT20 | **GPIO 5** | **GPIO 6** | Primary feedback for temperature, RH & calculated VPD |
+| **Pot Level** | AHT20 | **GPIO 7** | **GPIO 8** | Microclimate detection at pot/soil surface |
+| **Ambient Intake** | AHT20 | **GPIO 9** | **GPIO 10**| Feedforward baseline for venting differential |
 
-### Device 2: Soil Moisture Monitor (Analog ADC)
-Uses **Analog input (ADC)** to read soil resistance:
-
-| Soil Moisture Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
+#### B. Soil Moisture Sensor (Analog ADC)
+| Sensor Pin | Wire Color (suggested) | ESP32-C3 Pin | Purpose |
 | :--- | :--- | :--- | :--- |
 | **VCC** | Red | **3.3V** (or **GPIO 1** for power gating) | Power supply |
 | **GND** | Black | **GND** | Ground |
 | **AO** (Analog Out) | Blue | **GPIO 0** | Analog input (ADC1_CH0) |
 
+#### C. Actuators & Relays (Pumps & Ventilation)
+| Output Device | Control Pin | Voltage / Type | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Noctua NF-A14 Fan** | **GPIO 1** | 12V (25 kHz PWM) | Variable speed extraction fan |
+| **Relay Channel 1** | **GPIO 2** | 12V DC Pump | Fresh nutrient drip irrigation |
+| **Relay Channel 2** | **GPIO 3** | 12V DC Diaphragm | Runoff waste vacuum pump |
+| **Relay Channel 3** | **GPIO 4** | 12V DC Pump | Reservoir agitation / nutrient aeration |
+| **Relay Channel 4** | **GPIO 20**| Spare Relay | Unassigned / auxiliary |
+
+*(Note: The grow light is switched via an external Home Assistant smart plug to ensure 240V AC mains isolation).*
+
 ---
 
 ## 2. Workspace Helper Scripts
 
-Host commands are located inside the `scripts/` directory. They are designed to auto-detect which USB port your ESP32-C3 is plugged into and automatically manage serial permissions.
+Host commands are located inside the [`scripts/`](scripts/) directory.
 
-### 📤 Deploy / Flash Selective Devices
-To flash a specific device, pass the device directory name as an argument. The deployer will automatically copy all files inside `lib/` to `/lib/` on the board, upload the files inside the device's directory (such as `main.py`, `boot.py`, and renaming `config.py` to root `/config.py`), and soft-reset the processor:
+### 📤 1. Deploy / Flash Devices
 
+#### Remote WebREPL Deployment (Over WiFi)
+To flash an ESP32 connected to your local network without plugging in a USB cable:
 ```bash
-# Deploy the Temperature & Humidity node
-python3 scripts/deploy.py temp_humidity
+# Uses the DEVICE_IP configured in devices/<device>/config.py:
+python3 scripts/deploy.py grow_wardrobe --remote
 
-# Deploy the Grow Wardrobe controller
+# Or explicitly specifying an IP address:
+python3 scripts/deploy.py grow_wardrobe --ip 192.168.86.50
+```
+*The deployer syncs all shared libraries in `lib/` to `/lib/`, syncs device files to `/`, and soft-resets the MCU via WebREPL.*
+
+#### Local USB Deployment
+When the board is connected via USB:
+```bash
 python3 scripts/deploy.py grow_wardrobe
 ```
+*Auto-detects `/dev/ttyACM*` or `/dev/ttyUSB*` and uses `mpremote`.*
 
-*If you do not provide an argument, the deployer will print a list of all available device folders in your project.*
-
-### 💻 Connect to interactive Python REPL
-Launches you directly into the interactive MicroPython command line (REPL) running on the chip without soft-resetting:
+### 💻 2. Interactive MicroPython REPL
+Launches directly into the interactive MicroPython command line (REPL) on the chip:
 ```bash
 python3 scripts/repl.py
 ```
-*(Remember: Press `Ctrl + ]` to exit the REPL).*
+*(Press `Ctrl + ]` to exit the REPL).*
 
-### 🔍 Check Board Status
-Queries the connected microcontroller's system information and lists all active files on its internal filesystem:
+### 🔍 3. Check Board Status
+Queries the connected microcontroller's system information and lists active files on its internal filesystem:
 ```bash
 python3 scripts/status.py
 ```
@@ -65,47 +81,23 @@ python3 scripts/status.py
 
 ## 3. How the Config-Driven Pattern Works
 
-### Root Bootstrapper
-For all devices, `main.py` is identical and extremely clean:
-```python
-import config
-from lib.app import run
-
-run(config)
-```
-
 ### Device Configuration (`config.py`)
-Each board specifies its physical characteristics, attached peripherals, and execution settings. 
+Each board specifies its physical characteristics, attached peripherals, and execution settings.
 
-For instance, the **Temperature & Humidity Node** ([devices/temp_humidity/config.py](file:///home/cbailey/workspace/esp-automation/devices/temp_humidity/config.py)):
-```python
-import secrets
-
-DEVICE_NAME = secrets.DEVICE_NAME
-DEEP_SLEEP_ENABLED = True
-SLEEP_SECONDS = 900 # Sleep 15 mins
-
-TEMP_HUMIDITY_SENSOR = {
-    "sda": 5,
-    "scl": 6,
-    "type": "AHT20"
-}
-SOIL_MOISTURE_SENSOR = None
-```
-
-Whereas the complex **Grow Wardrobe Node** ([devices/grow_wardrobe/config.py](file:///home/cbailey/workspace/esp-automation/devices/grow_wardrobe/config.py)):
+Example from [devices/grow_wardrobe/config.py](devices/grow_wardrobe/config.py):
 ```python
 import secrets
 
 DEVICE_NAME = secrets.DEVICE_NAME
 DEEP_SLEEP_ENABLED = False  # Continuous execution
-SLEEP_SECONDS = 10         # Cycle interval
+SLEEP_SECONDS = 5          # Main loop cycle interval
 
-TEMP_HUMIDITY_SENSOR = {
-    "sda": 5,
-    "scl": 6,
-    "type": "AHT10"
-}
+# Multi-zone temperature/humidity sensors
+TEMP_HUMIDITY_CANOPY = {"sda": 5, "scl": 6, "type": "AHT20"}
+TEMP_HUMIDITY_POT = {"sda": 7, "scl": 8, "type": "AHT20"}
+TEMP_HUMIDITY_AMBIENT = {"sda": 9, "scl": 10, "type": "AHT20"}
+
+# Analog soil moisture
 SOIL_MOISTURE_SENSOR = {
     "adc_pin": 0,
     "dry": 3800,
@@ -113,10 +105,21 @@ SOIL_MOISTURE_SENSOR = {
     "power_pin": None,
     "num_samples": 5
 }
+
+# 25 kHz PWM Fan
 PWM_FAN = {
-    "pin": 12,
+    "pin": 1,
     "freq": 25000,
-    "target_temp": 28.0
+    "min_duty": 10,
+    "max_duty": 100,
+}
+
+# 4-Channel Relays
+RELAYS = {
+    "irrigation": {"pin": 2, "active_low": True},
+    "runoff":     {"pin": 3, "active_low": True},
+    "agitation":  {"pin": 4, "active_low": True},
+    "spare":      {"pin": 20, "active_low": True},
 }
 ```
 
@@ -125,8 +128,6 @@ PWM_FAN = {
 ## 4. Host Setup & IDE LSP Integration
 
 ### 🐍 Python Environment Setup
-To set up your python environment on the host and install all required tools (`esptool`, `mpremote`, and MicroPython autocompletion stubs):
-
 ```bash
 # Create the virtual environment
 python3 -m venv .venv
@@ -137,71 +138,93 @@ source .venv/bin/activate
 # Install required dependencies
 pip install -r requirements.txt
 ```
-*(Run `deactivate` to exit the environment).*
 
-Once installed, your editor's LSP (like Pyright/Basedpyright in LazyVim) will read the configured `pyrightconfig.json` to resolve the shared `lib/` folder and offer full autocompletion, type hinting, and zero warnings across all folders!
+Once installed, your editor's LSP (Pyright, Basedpyright, or Ruff) will read `pyrightconfig.json` to resolve the shared `lib/` folder and offer full autocompletion, type hinting, and zero warnings.
 
-### 🔌 Running Without Sudo (Serial Port Permissions)
-If you encounter permission issues when interacting with the serial port, add your user to the appropriate group (usually `uucp` on Arch or `dialout` on Debian/Ubuntu):
-
+### 🔌 Serial Port Permissions (Linux)
+If you encounter permission issues interacting with the serial port, add your user to `uucp` (Arch) or `dialout` (Debian/Ubuntu):
 ```bash
-# Add user to uucp group (or dialout)
-sudo usermod -aG uucp $USER
+sudo usermod -aG dialout $USER  # or: sudo usermod -aG uucp $USER
 ```
-*Note: You will need to log out and log back in (or run `newgrp uucp`) for the group changes to take effect.*
+*(Log out and back in for group changes to take effect).*
 
 ---
 
-## 5. WiFi Configuration & OTA WebREPL
+## 5. WiFi Configuration & Secrets
 
-### 🔑 Credentials Setup
 1. Copy the template secrets file:
    ```bash
    cp lib/secrets.py.example lib/secrets.py
    ```
-2. Open the newly created [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) and fill in your WiFi details and credentials:
+2. Open [lib/secrets.py](lib/secrets.py) and configure your network details:
    ```python
    WIFI_SSID = "your-wifi-name"
    WIFI_PASSWORD = "your-wifi-password"
    WEBREPL_PASSWORD = "your-webrepl-password"
+   MQTT_BROKER = "192.168.86.X"
+   MQTT_USER = "your-mqtt-user"
+   MQTT_PASSWORD = "your-mqtt-password"
    ```
-   *Note: [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py) is ignored by Git to keep your network credentials secure.*
-
-### 📡 Always-On vs. Deep Sleep WiFi Logic
-* **Always-On Nodes (e.g., Grow Wardrobe):** The firmware maintains a persistent WiFi network stack and avoids active interface toggles between measurement cycles. This prevents WebREPL connections from dropping, keeping remote REPL control and OTA updates stable.
-* **Deep Sleep Nodes (e.g., Temperature & Humidity):** To minimize power consumption, the WiFi radio is actively shut down (`wlan.active(False)`) immediately after posting telemetry data, before the device enters hardware sleep mode.
+   *Note: `lib/secrets.py` is ignored by Git to keep credentials secure.*
 
 ---
 
-## 6. Home Assistant Integration
+## 6. Home Assistant & MQTT Integration
 
-This project includes a shared client module **`lib/homeassistant.py`** to post data directly to Home Assistant's REST API.
+The system communicates with Home Assistant using **MQTT** (`wardrobe/...` topics) and optional REST API (`lib/homeassistant.py`).
 
-### 🔑 Setup
-1. Generate a **Long-Lived Access Token** in your Home Assistant profile settings.
-2. In [lib/secrets.py](file:///home/cbailey/workspace/esp-automation/lib/secrets.py), configure `HA_URL` (use your Home Assistant server's local IP address instead of `.local`) and `HA_TOKEN`:
-   ```python
-   HA_URL = "http://192.168.86.X:8123"
-   HA_TOKEN = "your-long-lived-access-token"
-   ```
-
-Telemetry payloads are automatically structured and posted inside [lib/app.py](file:///home/cbailey/workspace/esp-automation/lib/app.py) using the configured `DEVICE_NAME` prefix. The entities are created in Home Assistant on the first successful telemetry post.
+### MQTT Best Practices & Conventions
+1. **Retain Rules**:
+   - **State topics (`.../state`) MUST have `retain=True`**: Ensures Home Assistant and reconnecting dashboards immediately reflect the current state on startup.
+   - **Command topics (`.../set`, `.../trigger`) MUST have `retain=False`**: Prevents the MQTT broker from replaying stale commands when the microcontroller reboots.
+2. **Key Entities**:
+   - `select.ventilation_mode`: options `["AUTO", "MANUAL"]`.
+   - `select.irrigation_mode`: options `["AUTO", "MANUAL"]`.
+   - `sensor.esp32_growdrobe_canopy_temp`, `sensor.esp32_growdrobe_canopy_humidity`, `sensor.esp32_growdrobe_vpd`.
 
 ---
 
-## 7. Deep Sleep & Battery Optimization
+## 7. Frontend Web Dashboard
 
-### 💤 Deep Sleep Behavior
-* For nodes with `DEEP_SLEEP_ENABLED = True`, the board boots, reads the sensors, connects to WiFi, posts to Home Assistant, and then enters deep sleep.
-* To prevent battery waste, the **5-second deployment safeguard delay** is only active on a cold boot or manual hardware reset (`machine.reset_cause() != machine.DEEPSLEEP_RESET`). Waking from deep sleep triggers sensor read cycles instantly.
+The repository includes a modern React/Tailwind web dashboard located in [`frontend/grow_wardrobe/`](frontend/grow_wardrobe/README.md).
 
-### 🔌 Battery-Saving GPIO Power-Gating (Soil Moisture)
-Soil moisture sensors draw continuous current if wired directly to the 3.3V power rail. To prevent this, you can configure a `power_pin` in your sensor dictionary:
-1. Connect the sensor's **VCC** pin to **GPIO 1** instead of the 3.3V rail.
-2. In your device's config dictionary, set `"power_pin": 1`.
-3. The board will automatically supply power to the sensor, wait for it to stabilize, take readings, and then float the pin during deep sleep, reducing sleep current to just a few microamps!
+### Quick Commands
+```bash
+cd frontend/grow_wardrobe
 
-### 🔋 Battery Voltage & Percentage Sensing (Optional)
-The system includes automatic battery monitoring that reads the 18650's voltage and calculates its remaining percentage:
-1. **The Circuit:** Construct a **1:1 voltage divider** (using two **10kΩ** or **100kΩ** resistors). Connect the battery positive to one resistor, Ground (`GND`) to the other, and connect their junction to **GPIO 3** (`ADC1_CH3`) on the ESP32-C3.
-2. **Auto-Detection:** The firmware automatically checks the voltage on GPIO 3 during startup. If the voltage divider is not wired up (< 2.5V), it prints a clean message to the REPL, and **bypasses battery telemetry safely** without breaking the rest of the sensor readings.
+# Development server
+npm run dev
+
+# Run test suite
+npm test -- --run
+
+# Build production bundle
+npm run build
+
+# Deploy to Home Assistant (/homeassistant/www/grow_wardrobe/)
+npm run deploy
+```
+
+---
+
+## 8. Automated Testing
+
+### Backend & MicroPython Tests
+Run unit tests with pytest from the repository root:
+```bash
+PYTHONPATH=. pytest
+```
+
+### Frontend Dashboard Tests
+Run Vitest tests in the frontend directory:
+```bash
+cd frontend/grow_wardrobe && npm test -- --run
+```
+
+---
+
+## 9. Companion Devices
+
+- **[Grow Wardrobe Web Dashboard](frontend/grow_wardrobe/README.md)**: Real-time telemetry, fan dynamics, dual-medium irrigation scheduling, and photoperiod timeline visualization.
+- **[Wardrobe Touchscreen Panel](devices/wardrobe_touchscreen/README.md)**: 2.8" SPI color touchscreen powered by an ESP32-C3 Super Mini running ESPHome.
+- **[Wardrobe Camera Node](devices/wardrobe_camera/README.md)**: ESP32-CAM module streaming live video and recording growth timelapses.
