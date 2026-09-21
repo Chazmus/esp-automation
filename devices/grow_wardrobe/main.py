@@ -11,15 +11,17 @@ from lib.drivers.fan import PWMFan
 from lib.drivers.temp_humidity import TempHumiditySensor
 from lib.controllers.vpd import VPDController, calculate_vpd
 from lib.controllers.irrigation import IrrigationController
+from lib.config_store import ConfigStore
 
 
 print("\n========================================")
 print(f"ESP32-C3 Node: {config.DEVICE_NAME} (MQTT HOA Edition)")
 print("========================================\n")
 
-# --- 1. State Tracking ---
+# --- 1. State Tracking & Config Store ---
 vent_mode = "AUTO"
 irrig_mode = "AUTO"
+config_store = ConfigStore()
 
 # --- 2. Hardware Initialization ---
 fan = PWMFan(pin=config.PWM_FAN["pin"], freq=config.PWM_FAN.get("freq", 25000))
@@ -32,7 +34,10 @@ waste_relay = Relay(pin=config.IRRIGATION_CONFIG["waste_pin"], active_high=True)
 # Controllers
 vpd_controller = VPDController(fan, config.PWM_FAN)
 vpd_controller.set_mode(vent_mode)
-irrig_controller = IrrigationController(drip_relay, agitate_relay, waste_relay, config.IRRIGATION_CONFIG)
+
+irrig_settings = dict(config.IRRIGATION_CONFIG)
+irrig_settings.update(config_store.config)
+irrig_controller = IrrigationController(drip_relay, agitate_relay, waste_relay, irrig_settings)
 
 # Sensors
 temp_sensors = {}
@@ -105,7 +110,41 @@ def mqtt_callback(topic, msg):
     elif topic.endswith("irrigation/waste/set") and irrig_mode == "MANUAL":
         waste_relay.on() if msg == "ON" else waste_relay.off()
         pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
-        
+
+    # -- Dynamic Grow Configuration --
+    elif "/config/" in topic and topic.endswith("/set"):
+        parts = topic.split("/")
+        if len(parts) >= 4:
+            param = parts[-2]
+            key_map = {
+                "medium": ("medium", str),
+                "coco_interval": ("coco_interval_hours", float),
+                "coco_interval_hours": ("coco_interval_hours", float),
+                "coco_duration": ("coco_duration_secs", float),
+                "coco_duration_secs": ("coco_duration_secs", float),
+                "soil_trigger": ("soil_trigger_pct", float),
+                "soil_trigger_pct": ("soil_trigger_pct", float),
+                "soil_target": ("soil_target_pct", float),
+                "soil_target_pct": ("soil_target_pct", float),
+                "soil_max_water": ("soil_max_water_secs", float),
+                "soil_max_water_secs": ("soil_max_water_secs", float),
+                "soil_soak_wait": ("soil_soak_wait_mins", float),
+                "soil_soak_wait_mins": ("soil_soak_wait_mins", float),
+                "light_preset": ("light_preset", str),
+            }
+            if param in key_map:
+                store_key, conv = key_map[param]
+                try:
+                    val = conv(msg)
+                    config_store.set(store_key, val)
+                    irrig_controller.update_config(config_store.config)
+                    pub(client, f"config/{param}/state", str(val), retain=True)
+                    if store_key != param:
+                        pub(client, f"config/{store_key}/state", str(val), retain=True)
+                    print(f"⚙️ Config applied & saved: {store_key} = {val}")
+                except Exception as e:
+                    print(f"⚠️ Error applying config {param}={msg}: {e}")
+
 
 
 # --- 4. Network Setup ---
@@ -122,6 +161,7 @@ if wifi.connect():
         # Publish online status
         pub(client, "status", "online", retain=True)
         # Subscribe to all command topics
+        client.subscribe(f"{BASE_TOPIC}/config/+/set".encode())
         client.subscribe(f"{BASE_TOPIC}/+/+/set".encode())
         client.subscribe(f"{BASE_TOPIC}/+/set".encode())
         print("✅ MQTT Connected & Subscribed to all /set topics.")
@@ -129,9 +169,12 @@ if wifi.connect():
         # Publish initial states
         pub(client, "ventilation/mode/state", vent_mode, retain=True)
         pub(client, "irrigation/mode/state", irrig_mode, retain=True)
+        for k, v in config_store.config.items():
+            pub(client, f"config/{k}/state", str(v), retain=True)
         
         last_sensor_read = 0
         last_ha_post = 0
+        latest_soil_pct = None
         
         # --- 5. Main Loop ---
         while True:
@@ -175,6 +218,7 @@ if wifi.connect():
                     if soil_sensor is not None:
                         raw, pct = soil_sensor.read()
                         if pct is not None:
+                            latest_soil_pct = pct
                             telemetry["moisture"] = round(pct, 1)
 
                     if fan is not None:
@@ -190,7 +234,7 @@ if wifi.connect():
             
             # 3. Irrigation State Machine
             if irrig_mode == "AUTO":
-                log = irrig_controller.evaluate()
+                log = irrig_controller.evaluate(soil_moisture=latest_soil_pct)
                 if log:
                     print(log)
                     pub(client, "irrigation/drip/state", "ON" if drip_relay.is_on() else "OFF")

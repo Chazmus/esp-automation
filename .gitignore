@@ -209,3 +209,8 @@ tags
 [._]*.un~
 
 # End of https://www.toptal.com/developers/gitignore/api/python,vim
+
+# Local device config and frontend build artifacts
+grow_config.json
+frontend/**/dist/
+frontend/**/node_modules/
