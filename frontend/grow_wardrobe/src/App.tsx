@@ -26,7 +26,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Activity,
-  HelpCircle,
   Sliders,
   Flame,
 } from 'lucide-react';
@@ -835,28 +834,6 @@ export function App() {
                 Defines <strong className="text-slate-200">cooling capability</strong>. When canopy temp exceeds 28°C, thermal loop ramps speed to draw in cooler room air.
               </p>
             </div>
-          </div>
-
-          {/* Educational Callout: "Does the difference in VPD define fan speed?" */}
-          <div className="bg-indigo-950/20 border border-indigo-800/40 rounded-xl p-4 text-xs space-y-2">
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold">
-              <HelpCircle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-              <span>Does the difference in VPD define fan speed?</span>
-            </div>
-            <p className="text-slate-300 leading-relaxed">
-              <strong className="text-white">Yes, through two distinct VPD differentials:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed pl-1">
-              <li>
-                <strong className="text-slate-200">Target vs Canopy VPD (Demand):</strong> The PI loop measures <code className="text-emerald-300">Target (1.20 kPa) - Canopy VPD</code>. If canopy VPD is low (high humidity), this difference creates the proportional & integral demand that accelerates the fan.
-              </li>
-              <li>
-                <strong className="text-slate-200">Ambient vs Canopy Vapor Pressure (The Physics Guard):</strong> If the ambient room air is <em className="text-amber-300">wetter</em> than the wardrobe air, drawing in outside air would make humidity worse. The controller clamps the fan to baseline ({minFanSpeed}%) unless thermal cooling is needed.
-              </li>
-              <li>
-                <strong className="text-slate-200">Safety Limits:</strong> Hard overrides immediately force 100% speed if canopy temp &gt; 30°C or relative humidity &gt; 65%.
-              </li>
-            </ul>
           </div>
         </section>
 

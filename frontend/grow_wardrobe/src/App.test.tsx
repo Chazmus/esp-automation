@@ -79,7 +79,7 @@ describe('Grow Wardrobe Frontend', () => {
     await waitFor(() => {
       expect(screen.getByText(/Fan Dynamics & Intelligence/i)).toBeInTheDocument();
       expect(screen.getByText(/Why is the fan set to 45%?/i)).toBeInTheDocument();
-      expect(screen.getByText(/Does the difference in VPD define fan speed?/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Does the difference in VPD define fan speed\?/i)).not.toBeInTheDocument();
       expect(screen.getByText(/1\. Target VPD Demand/i)).toBeInTheDocument();
       expect(screen.getByText(/2\. Intake Moisture Δ/i)).toBeInTheDocument();
       expect(screen.getByText(/3\. Thermal Differential ΔT/i)).toBeInTheDocument();
