@@ -1,5 +1,6 @@
 export type GrowMedium = 'coco' | 'soil';
 export type LightPreset = '18/6' | '12/12' | '24/0';
+export type AppTheme = 'slate' | 'forest' | 'oled' | 'light';
 
 export interface FanDriver {
   category: 'override' | 'clamp' | 'vpd' | 'temp' | 'manual' | 'optimal';

@@ -10,6 +10,7 @@ import {
 } from './ha';
 import type { GrowMedium, LightPreset } from './types';
 import { useGrowMetrics } from './hooks/useGrowMetrics';
+import { useTheme } from './hooks/useTheme';
 import { Header } from './components/Header';
 import { EnvironmentOverview } from './components/EnvironmentOverview';
 import { FanDynamicsPanel } from './components/FanDynamicsPanel';
@@ -18,6 +19,7 @@ import { QuickControls } from './components/QuickControls';
 import { SettingsModal } from './components/SettingsModal';
 
 export function App() {
+  const { theme, setTheme } = useTheme();
   const [haConfig, setHaConfig] = useState(getStoredHaConfig());
   const [connection, setConnection] = useState<Connection | null>(null);
   const [entities, setEntities] = useState<HassEntities>({});
@@ -227,7 +229,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-theme-base text-theme-text p-4 md:p-8 font-sans transition-colors duration-200">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <Header
@@ -235,6 +237,8 @@ export function App() {
           isConnecting={isConnecting}
           isConnected={Boolean(connection)}
           errorMessage={errorMessage}
+          currentTheme={theme}
+          onSelectTheme={setTheme}
           onOpenSettings={() => setShowSettings(true)}
         />
 

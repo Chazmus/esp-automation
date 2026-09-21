@@ -194,4 +194,19 @@ describe('Grow Wardrobe Frontend', () => {
     expect(fanSlider).toBeDisabled();
     expect(screen.getByText(/Switch ventilation to MANUAL to adjust speed/i)).toBeInTheDocument();
   });
+
+  it('allows switching themes and updates document data-theme attribute', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const themeButton = screen.getByRole('button', { name: /Theme selector/i });
+    expect(themeButton).toBeInTheDocument();
+
+    await user.click(themeButton);
+    expect(screen.getByText(/Forest Dark/i)).toBeInTheDocument();
+
+    await user.click(screen.getByText(/Forest Dark/i));
+    expect(document.documentElement.getAttribute('data-theme')).toBe('forest');
+    expect(localStorage.getItem('grow_wardrobe_theme')).toBe('forest');
+  });
 });

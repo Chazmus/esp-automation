@@ -30,18 +30,18 @@ export function QuickControls({
   onToggleAgitationPump,
 }: QuickControlsProps) {
   return (
-    <section className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-5">
-      <div className="border-b border-slate-800 pb-3">
-        <h2 className="text-lg font-semibold text-white">Manual Overrides</h2>
-        <p className="text-xs text-slate-400">Direct hardware relays & loops</p>
+    <section className="bg-theme-card border border-theme-border p-6 rounded-2xl space-y-5 transition-colors">
+      <div className="border-b border-theme-border-subtle pb-3">
+        <h2 className="text-lg font-semibold text-theme-text">Manual Overrides</h2>
+        <p className="text-xs text-theme-text-muted">Direct hardware relays & loops</p>
       </div>
 
       {/* Mode Toggles */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between p-3 bg-slate-950/40 rounded-xl border border-slate-800/60">
+        <div className="flex items-center justify-between p-3 bg-theme-surface rounded-xl border border-theme-border-subtle">
           <div>
-            <div className="text-sm font-medium text-white">Ventilation</div>
-            <div className="text-xs text-slate-400">PI VPD Loop Control</div>
+            <div className="text-sm font-medium text-theme-text">Ventilation</div>
+            <div className="text-xs text-theme-text-muted">PI VPD Loop Control</div>
           </div>
           <button
             type="button"
@@ -56,10 +56,10 @@ export function QuickControls({
           </button>
         </div>
 
-        <div className="flex items-center justify-between p-3 bg-slate-950/40 rounded-xl border border-slate-800/60">
+        <div className="flex items-center justify-between p-3 bg-theme-surface rounded-xl border border-theme-border-subtle">
           <div>
-            <div className="text-sm font-medium text-white">Irrigation</div>
-            <div className="text-xs text-slate-400">State Machine</div>
+            <div className="text-sm font-medium text-theme-text">Irrigation</div>
+            <div className="text-xs text-theme-text-muted">State Machine</div>
           </div>
           <button
             type="button"
@@ -76,10 +76,10 @@ export function QuickControls({
       </div>
 
       {/* Fan Speed Slider */}
-      <div className="space-y-2 p-3 bg-slate-950/40 rounded-xl border border-slate-800/60">
+      <div className="space-y-2 p-3 bg-theme-surface rounded-xl border border-theme-border-subtle">
         <div className="flex justify-between text-xs">
-          <span className="text-slate-400">Fan Speed Override</span>
-          <span className="text-white font-medium">{fanSpeed}%</span>
+          <span className="text-theme-text-muted">Fan Speed Override</span>
+          <span className="text-theme-text font-medium">{fanSpeed}%</span>
         </div>
         <input
           type="range"
@@ -91,7 +91,7 @@ export function QuickControls({
           className="w-full accent-emerald-500 disabled:opacity-40 cursor-pointer"
         />
         {ventMode === 'AUTO' && (
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-theme-text-dim">
             Switch ventilation to MANUAL to adjust speed
           </div>
         )}
@@ -105,7 +105,7 @@ export function QuickControls({
           className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-medium transition ${
             lightState
               ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
-              : 'bg-slate-800/30 border-slate-800 text-slate-400 hover:border-slate-700'
+              : 'bg-theme-surface border-theme-border text-theme-text-muted hover:border-theme-border-elevated'
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -121,7 +121,7 @@ export function QuickControls({
           className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-medium transition ${
             dripPumpState
               ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
-              : 'bg-slate-800/30 border-slate-800 text-slate-400 hover:border-slate-700'
+              : 'bg-theme-surface border-theme-border text-theme-text-muted hover:border-theme-border-elevated'
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -137,7 +137,7 @@ export function QuickControls({
           className={`w-full flex items-center justify-between p-3 rounded-xl border text-sm font-medium transition ${
             agitationPumpState
               ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
-              : 'bg-slate-800/30 border-slate-800 text-slate-400 hover:border-slate-700'
+              : 'bg-theme-surface border-theme-border text-theme-text-muted hover:border-theme-border-elevated'
           }`}
         >
           <div className="flex items-center gap-2.5">
