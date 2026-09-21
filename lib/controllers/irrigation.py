@@ -21,12 +21,8 @@ class IrrigationController:
         # Apply configuration
         self.update_config(config)
         
-        # In Coco mode, schedule first cycle shortly after boot
-        if self.medium == "COCO":
-            self.last_cycle_start = time.ticks_ms() - self.cycle_interval_ms + (5 * 60 * 1000)
-        else:
-            # In Soil mode, allow immediate triggering if dry
-            self.last_cycle_start = time.ticks_ms() - self.soil_soak_wait_ms
+        # On boot, initialize last_cycle_start to now (cycle will occur after cycle_interval)
+        self.last_cycle_start = time.ticks_ms()
             
         self._ensure_all_off()
 
