@@ -77,12 +77,17 @@ def mqtt_callback(topic, msg):
 
         vpd_controller.set_mode(vent_mode)
         pub(client, "ventilation/mode/state", vent_mode, retain=True)
+        if vent_mode == "MANUAL":
+            pub(client, "ventilation/reason/state", f"Manual Override: Fan set to {int(fan.speed)}%", retain=True)
+        else:
+            pub(client, "ventilation/reason/state", "Auto Mode: Evaluating VPD closed-loop", retain=True)
         print(f"Switched Ventilation mode to {vent_mode}")
             
     elif topic.endswith("ventilation/fan/set"):
         if vent_mode == "MANUAL":
             fan.set_speed(int(msg))
             pub(client, "ventilation/fan/state", int(fan.speed))
+            pub(client, "ventilation/reason/state", f"Manual Override: Fan set to {int(fan.speed)}%", retain=True)
             
     # -- Irrigation Controls --
     elif topic.endswith("irrigation/mode/set"):
@@ -198,6 +203,7 @@ if wifi.connect():
                     log = vpd_controller.evaluate(canopy_t, canopy_h, ambient_t, ambient_h, dt_seconds=5.0)
                     if log:
                         print(log)
+                        pub(client, "ventilation/reason/state", log, retain=True)
                     pub(client, "ventilation/fan/state", int(fan.speed))
                     
                 # Post telemetry every 10 seconds via MQTT
@@ -226,6 +232,9 @@ if wifi.connect():
 
                     if hasattr(vpd_controller, 'last_vpd') and vpd_controller.last_vpd is not None:
                         telemetry["vpd"] = round(vpd_controller.last_vpd, 2)
+
+                    if hasattr(vpd_controller, 'last_reason') and vpd_controller.last_reason:
+                        telemetry["fan_reason"] = vpd_controller.last_reason
 
                     if telemetry:
                         payload_json = json.dumps(telemetry)

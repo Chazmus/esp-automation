@@ -24,6 +24,11 @@ import {
   Gauge,
   Timer,
   ShieldCheck,
+  ShieldAlert,
+  Activity,
+  HelpCircle,
+  Sliders,
+  Flame,
 } from 'lucide-react';
 
 export function App() {
@@ -127,16 +132,166 @@ export function App() {
   const getState = (id: string, fallback = '--') => entities[id]?.state ?? fallback;
 
   const isEspOnline = getState('binary_sensor.esp32_growdrobe_status') === 'on';
-  const canopyTemp = getState('sensor.esp32_growdrobe_canopy_temp', getState('sensor.esp32_growdrobe_ambient_temp'));
-  const canopyHumidity = getState('sensor.esp32_growdrobe_canopy_humidity', getState('sensor.esp32_growdrobe_ambient_humidity'));
-  const canopyVpd = getState('sensor.esp32_growdrobe_canopy_vpd', getState('sensor.esp32_growdrobe_vpd'));
-  const potMoisture = getState('sensor.esp32_growdrobe_moisture');
+
+  // Canopy Zone
+  const canopyTemp = getState('sensor.esp32_growdrobe_canopy_temp', getState('sensor.canopy_temp'));
+  const canopyHumidity = getState('sensor.esp32_growdrobe_canopy_humidity', getState('sensor.canopy_humidity'));
+  const canopyVpd = getState('sensor.esp32_growdrobe_canopy_vpd', getState('sensor.canopy_vpd'));
+
+  // Pot & Root Zone
+  const potTemp = getState('sensor.esp32_growdrobe_pot_temp', getState('sensor.pot_temp'));
+  const potHumidity = getState('sensor.esp32_growdrobe_pot_humidity', getState('sensor.pot_humidity'));
+  const potVpd = getState('sensor.esp32_growdrobe_pot_vpd', getState('sensor.pot_vpd'));
+  const potMoisture = getState('sensor.esp32_growdrobe_moisture', getState('sensor.soil_moisture'));
+
+  // Physics & VPD calculation helpers
+  const calculateSvp = (temp: number) => {
+    return 0.61078 * Math.exp((17.27 * temp) / (temp + 237.3));
+  };
+
+  const calculateAvp = (temp: number, humidity: number) => {
+    return calculateSvp(temp) * (humidity / 100.0);
+  };
+
+  const calculateVpd = (temp: number, humidity: number, leafOffset = 0.0) => {
+    const leafTemp = temp - leafOffset;
+    const svpLeaf = calculateSvp(leafTemp);
+    const avpAir = calculateAvp(temp, humidity);
+    return Math.max(0.0, svpLeaf - avpAir);
+  };
+
+  // Ambient / Intake Zone
+  const ambientTemp = getState('sensor.esp32_growdrobe_ambient_temp', getState('sensor.ambient_temp'));
+  const ambientHumidity = getState('sensor.esp32_growdrobe_ambient_humidity', getState('sensor.ambient_humidity'));
+  let ambientVpd = getState('sensor.esp32_growdrobe_ambient_vpd', getState('sensor.ambient_vpd'));
+  if (ambientVpd === '--' && ambientTemp !== '--' && ambientHumidity !== '--') {
+    const t = Number(ambientTemp);
+    const h = Number(ambientHumidity);
+    if (!isNaN(t) && !isNaN(h)) {
+      ambientVpd = calculateVpd(t, h, 0.0).toFixed(2);
+    }
+  }
+
+  // Controls & Actuators
   const fanSpeed = getState('sensor.esp32_growdrobe_fan_speed', getState('number.ventilation_fan_speed'));
   const ventMode = getState('select.ventilation_mode', 'AUTO');
   const irrMode = getState('select.irrigation_mode', 'AUTO');
   const lightState = getState('switch.grow_light') === 'on';
   const dripPumpState = getState('switch.drip_pump') === 'on';
   const agitationPumpState = getState('switch.agitation_pump') === 'on';
+  const fanReason = getState('sensor.esp32_growdrobe_ventilation_reason', getState('sensor.ventilation_reason'));
+
+  // Fan Dynamics & Airflow Physics Engine
+  const numCanopyT = Number(canopyTemp);
+  const numCanopyH = Number(canopyHumidity);
+  const numCanopyVpd = Number(canopyVpd);
+  const numAmbientT = Number(ambientTemp);
+  const numAmbientH = Number(ambientHumidity);
+  const numAmbientVpd = Number(ambientVpd);
+  const numFanSpeed = Number(fanSpeed) || 0;
+
+  const canopyAvp = !isNaN(numCanopyT) && !isNaN(numCanopyH) ? calculateAvp(numCanopyT, numCanopyH) : null;
+  const ambientAvp = !isNaN(numAmbientT) && !isNaN(numAmbientH) ? calculateAvp(numAmbientT, numAmbientH) : null;
+
+  const targetVpd = 1.2;
+  const maxSafeTemp = 30.0;
+  const minSafeTemp = 16.0;
+  const maxSafeHum = 65.0;
+  const targetTemp = 28.0;
+  const minFanSpeed = 30;
+
+  const vpdTargetDiff = !isNaN(numCanopyVpd) ? targetVpd - numCanopyVpd : null;
+  const vpdAmbientDiff = !isNaN(numAmbientVpd) && !isNaN(numCanopyVpd) ? numAmbientVpd - numCanopyVpd : null;
+  const tempDiff = !isNaN(numAmbientT) && !isNaN(numCanopyT) ? numAmbientT - numCanopyT : null;
+  const avpDiff = ambientAvp !== null && canopyAvp !== null ? ambientAvp - canopyAvp : null;
+
+  let fanDriver: {
+    category: 'override' | 'clamp' | 'vpd' | 'temp' | 'manual' | 'optimal';
+    title: string;
+    badge: string;
+    badgeColor: string;
+    explanation: string;
+    isClampActive: boolean;
+  };
+
+  if (ventMode === 'MANUAL') {
+    fanDriver = {
+      category: 'manual',
+      title: 'Manual Override Active',
+      badge: 'Manual Control',
+      badgeColor: 'bg-amber-500/10 border-amber-500/40 text-amber-300',
+      explanation: `The fan is locked at ${numFanSpeed}% by manual user command. Closed-loop VPD regulation and thermal safeguards are bypassed.`,
+      isClampActive: false,
+    };
+  } else if (!isNaN(numCanopyT) && numCanopyT > maxSafeTemp) {
+    fanDriver = {
+      category: 'override',
+      title: 'Thermal Emergency Failsafe',
+      badge: 'Failsafe: 100% Emergency',
+      badgeColor: 'bg-rose-500/20 border-rose-500/50 text-rose-300',
+      explanation: `Canopy temperature (${numCanopyT.toFixed(1)}°C) exceeds safety limit (${maxSafeTemp.toFixed(1)}°C). Fan is forced to 100% maximum speed to prevent thermal stress.`,
+      isClampActive: false,
+    };
+  } else if (!isNaN(numCanopyH) && numCanopyH > maxSafeHum) {
+    fanDriver = {
+      category: 'override',
+      title: 'Bud Rot & Mold Failsafe',
+      badge: 'Failsafe: 100% Emergency',
+      badgeColor: 'bg-rose-500/20 border-rose-500/50 text-rose-300',
+      explanation: `Canopy relative humidity (${numCanopyH.toFixed(1)}%) exceeds safety ceiling (${maxSafeHum.toFixed(1)}%). Fan is forced to 100% to purge moisture and prevent fungal pathogens.`,
+      isClampActive: false,
+    };
+  } else if (!isNaN(numCanopyT) && numCanopyT < minSafeTemp) {
+    fanDriver = {
+      category: 'override',
+      title: 'Low Temperature Protection',
+      badge: 'Failsafe: Min Speed',
+      badgeColor: 'bg-blue-500/20 border-blue-500/50 text-blue-300',
+      explanation: `Canopy temperature (${numCanopyT.toFixed(1)}°C) is below minimum safe threshold (${minSafeTemp.toFixed(1)}°C). Fan is restricted to baseline (${minFanSpeed}%) to prevent chilling the crop.`,
+      isClampActive: false,
+    };
+  } else {
+    const isTooHumid = vpdTargetDiff !== null && vpdTargetDiff > 0.05;
+    const isAmbientWetter = avpDiff !== null && avpDiff >= 0.0;
+
+    if (isTooHumid && isAmbientWetter) {
+      fanDriver = {
+        category: 'clamp',
+        title: 'Ambient Moisture Clamp Active',
+        badge: 'Physics Guard: Clamped',
+        badgeColor: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+        explanation: `The tent needs drying (Canopy VPD ${numCanopyVpd.toFixed(2)} kPa < target 1.20 kPa), but outside room air contains MORE water vapor (${ambientAvp?.toFixed(2)} kPa vs ${canopyAvp?.toFixed(2)} kPa). Ramping up the fan would suck in MORE moisture! The controller clamps the fan to baseline (${minFanSpeed}%) unless cooling is required.`,
+        isClampActive: true,
+      };
+    } else if (!isNaN(numCanopyT) && numCanopyT > targetTemp) {
+      fanDriver = {
+        category: 'temp',
+        title: 'Thermal Proportional Regulation',
+        badge: 'Thermal Cooling',
+        badgeColor: 'bg-orange-500/20 border-orange-500/50 text-orange-300',
+        explanation: `Canopy temperature (${numCanopyT.toFixed(1)}°C) exceeds comfort target (${targetTemp.toFixed(1)}°C). Fan speed is proportionally increased to draw in cooler room air (${!isNaN(numAmbientT) ? numAmbientT.toFixed(1) + '°C' : 'ambient'}).`,
+        isClampActive: false,
+      };
+    } else if (isTooHumid) {
+      fanDriver = {
+        category: 'vpd',
+        title: 'VPD Deficit Closed-Loop (PI)',
+        badge: 'VPD Transpiration Drive',
+        badgeColor: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300',
+        explanation: `Canopy VPD (${numCanopyVpd.toFixed(2)} kPa) is below target (${targetVpd.toFixed(2)} kPa). Intake air is drier (${ambientAvp?.toFixed(2)} kPa vs ${canopyAvp?.toFixed(2)} kPa), so the PI loop is running the fan at ${numFanSpeed}% to exhaust humid boundary air and stimulate transpiration.`,
+        isClampActive: false,
+      };
+    } else {
+      fanDriver = {
+        category: 'optimal',
+        title: 'Optimal VPD Sweet Spot',
+        badge: 'In Target Band',
+        badgeColor: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300',
+        explanation: `Canopy VPD (${!isNaN(numCanopyVpd) ? numCanopyVpd.toFixed(2) : '--'} kPa) is in the sweet spot (~1.20 kPa). Fan operates at steady baseline circulation (${numFanSpeed}%) with minimal energy consumption.`,
+        isClampActive: false,
+      };
+    }
+  }
 
   // Actuator Handlers
   const handleToggleLight = async () => {
@@ -261,46 +416,366 @@ export function App() {
           </div>
         )}
 
-        {/* Metrics Grid */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
-              <span>Canopy Temp</span>
-              <Thermometer className="w-4 h-4 text-amber-400" />
+        {/* Multi-Zone Climate Overview (All 3 Sensors) */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Canopy Zone Card */}
+          <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+                  <Sprout className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">Canopy Zone</div>
+                  <div className="text-[11px] text-slate-400">Foliage & Transpiration</div>
+                </div>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-300 font-medium">
+                Primary
+              </span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              {canopyTemp} <span className="text-base font-normal text-slate-400">°C</span>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Temp</span>
+                  <Thermometer className="w-3 h-3 text-amber-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {canopyTemp}<span className="text-xs font-normal text-slate-400">°C</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Humidity</span>
+                  <Droplets className="w-3 h-3 text-blue-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {canopyHumidity}<span className="text-xs font-normal text-slate-400">%</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>VPD</span>
+                  <Wind className="w-3 h-3 text-emerald-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {canopyVpd}<span className="text-xs font-normal text-slate-400">kPa</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
-              <span>Canopy Humidity</span>
-              <Droplets className="w-4 h-4 text-blue-400" />
+          {/* Pot & Root Zone Card */}
+          <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-teal-500/10 border border-teal-500/30 rounded-lg text-teal-400">
+                  <Droplets className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">Pot & Root Zone</div>
+                  <div className="text-[11px] text-slate-400">Substrate Microclimate</div>
+                </div>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-950 border border-teal-800 text-teal-300 font-medium">
+                Moisture: {potMoisture}%
+              </span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              {canopyHumidity} <span className="text-base font-normal text-slate-400">%</span>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Temp</span>
+                  <Thermometer className="w-3 h-3 text-amber-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {potTemp}<span className="text-xs font-normal text-slate-400">°C</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Humidity</span>
+                  <Droplets className="w-3 h-3 text-blue-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {potHumidity}<span className="text-xs font-normal text-slate-400">%</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>VPD</span>
+                  <Wind className="w-3 h-3 text-teal-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {potVpd}<span className="text-xs font-normal text-slate-400">kPa</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
-              <span>Canopy VPD</span>
-              <Wind className="w-4 h-4 text-emerald-400" />
+          {/* Ambient / Intake Zone Card */}
+          <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400">
+                  <Wind className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">Ambient / Room</div>
+                  <div className="text-[11px] text-slate-400">Intake Air Reference</div>
+                </div>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950 border border-blue-800 text-blue-300 font-medium">
+                Reference
+              </span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              {canopyVpd} <span className="text-base font-normal text-slate-400">kPa</span>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Temp</span>
+                  <Thermometer className="w-3 h-3 text-amber-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {ambientTemp}<span className="text-xs font-normal text-slate-400">°C</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>Humidity</span>
+                  <Droplets className="w-3 h-3 text-blue-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {ambientHumidity}<span className="text-xs font-normal text-slate-400">%</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between mb-1">
+                  <span>VPD</span>
+                  <Wind className="w-3 h-3 text-blue-400" />
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {ambientVpd}<span className="text-xs font-normal text-slate-400">kPa</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Fan Dynamics & Intelligence Panel */}
+        <section className="bg-slate-900/60 border border-slate-800/90 rounded-2xl p-5 md:p-6 space-y-5">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400">
+                <Wind className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  Fan Dynamics & Intelligence
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-800/80 text-indigo-300 font-normal">
+                    {ventMode === 'AUTO' ? 'PI Closed-Loop' : 'Manual Lock'}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Real-time control rationale, VPD differentials & airflow physics
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="bg-slate-950/60 border border-slate-800 px-3.5 py-1.5 rounded-xl flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs text-slate-400">Current Speed:</span>
+                <span className="text-sm font-bold text-white">{fanSpeed}%</span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
-              <span>Soil Moisture</span>
-              <Sprout className="w-4 h-4 text-teal-400" />
+          {/* Fan Speed Visual Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-indigo-400" />
+                Modulation Gauge
+              </span>
+              <span className="font-medium text-slate-300">{fanSpeed}% Active Output</span>
             </div>
-            <div className="text-3xl font-bold text-white">
-              {potMoisture} <span className="text-base font-normal text-slate-400">%</span>
+            <div className="h-3 w-full bg-slate-950 rounded-full border border-slate-800/80 overflow-hidden relative">
+              {/* Baseline marker 30% */}
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-slate-700 z-10"
+                style={{ left: '30%' }}
+                title="Min Safe Speed (30%)"
+              />
+              <div
+                className={`h-full transition-all duration-500 rounded-full ${
+                  fanDriver.category === 'override'
+                    ? 'bg-rose-500'
+                    : fanDriver.category === 'clamp'
+                    ? 'bg-amber-500'
+                    : 'bg-gradient-to-r from-indigo-500 via-emerald-500 to-teal-400'
+                }`}
+                style={{ width: `${Math.min(100, Math.max(0, numFanSpeed))}%` }}
+              />
             </div>
+            <div className="flex justify-between text-[10px] text-slate-500">
+              <span>0% (Off)</span>
+              <span>30% (Baseline Floor)</span>
+              <span>100% (Max CFM)</span>
+            </div>
+          </div>
+
+          {/* Active Driving Factor / Live Rationale Card */}
+          <div className="bg-slate-950/60 border border-slate-800/90 rounded-xl p-4 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {fanDriver.category === 'override' && <ShieldAlert className="w-4 h-4 text-rose-400" />}
+                {fanDriver.category === 'clamp' && <ShieldCheck className="w-4 h-4 text-amber-400" />}
+                {fanDriver.category === 'temp' && <Flame className="w-4 h-4 text-orange-400" />}
+                {fanDriver.category === 'vpd' && <Wind className="w-4 h-4 text-emerald-400" />}
+                {fanDriver.category === 'optimal' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                {fanDriver.category === 'manual' && <Sliders className="w-4 h-4 text-amber-400" />}
+                <span className="text-sm font-semibold text-white">
+                  Why is the fan set to {fanSpeed}%?
+                </span>
+              </div>
+              <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${fanDriver.badgeColor}`}>
+                {fanDriver.badge}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {fanDriver.explanation}
+            </p>
+
+            {/* Hardware confirmation if published by ESP32 */}
+            {fanReason && fanReason !== '--' && (
+              <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800/60 flex items-center gap-2">
+                <span className="text-slate-500 font-mono">Firmware Decision:</span>
+                <span className="font-mono text-emerald-300/90">{fanReason}</span>
+              </div>
+            )}
+          </div>
+
+          {/* 3-Card Differential Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Card 1: VPD Demand (Canopy vs Target) */}
+            <div className="bg-slate-950/40 border border-slate-800/70 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-300">1. Target VPD Demand</span>
+                <Wind className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <div className="text-lg font-bold text-white">{canopyVpd} kPa</div>
+                  <div className="text-[10px] text-slate-500">Canopy Leaf VPD</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-semibold text-slate-400">Target: {targetVpd.toFixed(2)} kPa</div>
+                  <div className="text-[10px] text-slate-500">
+                    {vpdTargetDiff !== null
+                      ? vpdTargetDiff > 0.05
+                        ? `Deficit: +${vpdTargetDiff.toFixed(2)} kPa`
+                        : vpdTargetDiff < -0.05
+                        ? `Surplus: ${vpdTargetDiff.toFixed(2)} kPa`
+                        : 'Balanced In Band'
+                      : '--'}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-normal border-t border-slate-800/60 pt-2">
+                Defines <strong className="text-slate-200">ventilation demand</strong>. Lower VPD means stagnant humid air, prompting the PI loop to increase airflow.
+              </p>
+            </div>
+
+            {/* Card 2: Intake vs Canopy Moisture (Effectiveness & Clamp) */}
+            <div className="bg-slate-950/40 border border-slate-800/70 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-300">2. Intake Moisture Δ</span>
+                <Droplets className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <div className="text-lg font-bold text-white">
+                    {canopyAvp !== null ? `${canopyAvp.toFixed(2)} kPa` : '--'}
+                  </div>
+                  <div className="text-[10px] text-slate-500">Canopy Vapor Press.</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-semibold text-slate-400">
+                    Room: {ambientAvp !== null ? `${ambientAvp.toFixed(2)} kPa` : '--'}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {avpDiff !== null
+                      ? avpDiff >= 0
+                        ? `Intake Wetter (+${avpDiff.toFixed(2)} kPa)`
+                        : `Intake Drier (${avpDiff.toFixed(2)} kPa)`
+                      : '--'}
+                    {vpdAmbientDiff !== null && ` • ΔVPD: ${vpdAmbientDiff >= 0 ? '+' : ''}${vpdAmbientDiff.toFixed(2)}`}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-normal border-t border-slate-800/60 pt-2">
+                Defines <strong className="text-slate-200">drying effectiveness</strong>. If intake air is wetter than the canopy, the moisture clamp prevents fan speed-up.
+              </p>
+            </div>
+
+            {/* Card 3: Thermal Differential (Cooling Potential) */}
+            <div className="bg-slate-950/40 border border-slate-800/70 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-300">3. Thermal Differential ΔT</span>
+                <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <div className="text-lg font-bold text-white">{canopyTemp}°C</div>
+                  <div className="text-[10px] text-slate-500">Canopy Temp</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-semibold text-slate-400">Room: {ambientTemp}°C</div>
+                  <div className="text-[10px] text-slate-500">
+                    {tempDiff !== null
+                      ? tempDiff < 0
+                        ? `${Math.abs(tempDiff).toFixed(1)}°C Cooler Outside`
+                        : `${tempDiff.toFixed(1)}°C Warmer Outside`
+                      : '--'}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-normal border-t border-slate-800/60 pt-2">
+                Defines <strong className="text-slate-200">cooling capability</strong>. When canopy temp exceeds 28°C, thermal loop ramps speed to draw in cooler room air.
+              </p>
+            </div>
+          </div>
+
+          {/* Educational Callout: "Does the difference in VPD define fan speed?" */}
+          <div className="bg-indigo-950/20 border border-indigo-800/40 rounded-xl p-4 text-xs space-y-2">
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold">
+              <HelpCircle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+              <span>Does the difference in VPD define fan speed?</span>
+            </div>
+            <p className="text-slate-300 leading-relaxed">
+              <strong className="text-white">Yes, through two distinct VPD differentials:</strong>
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed pl-1">
+              <li>
+                <strong className="text-slate-200">Target vs Canopy VPD (Demand):</strong> The PI loop measures <code className="text-emerald-300">Target (1.20 kPa) - Canopy VPD</code>. If canopy VPD is low (high humidity), this difference creates the proportional & integral demand that accelerates the fan.
+              </li>
+              <li>
+                <strong className="text-slate-200">Ambient vs Canopy Vapor Pressure (The Physics Guard):</strong> If the ambient room air is <em className="text-amber-300">wetter</em> than the wardrobe air, drawing in outside air would make humidity worse. The controller clamps the fan to baseline ({minFanSpeed}%) unless thermal cooling is needed.
+              </li>
+              <li>
+                <strong className="text-slate-200">Safety Limits:</strong> Hard overrides immediately force 100% speed if canopy temp &gt; 30°C or relative humidity &gt; 65%.
+              </li>
+            </ul>
           </div>
         </section>
 

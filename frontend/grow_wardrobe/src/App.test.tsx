@@ -29,6 +29,11 @@ describe('Grow Wardrobe Frontend', () => {
           'sensor.esp32_growdrobe_canopy_temp': { state: '24.5' },
           'sensor.esp32_growdrobe_canopy_humidity': { state: '58.2' },
           'sensor.esp32_growdrobe_canopy_vpd': { state: '1.25' },
+          'sensor.esp32_growdrobe_pot_temp': { state: '21.0' },
+          'sensor.esp32_growdrobe_pot_humidity': { state: '65.4' },
+          'sensor.esp32_growdrobe_pot_vpd': { state: '0.85' },
+          'sensor.esp32_growdrobe_ambient_temp': { state: '19.8' },
+          'sensor.esp32_growdrobe_ambient_humidity': { state: '51.0' },
           'sensor.esp32_growdrobe_moisture': { state: '38.0' },
           'number.ventilation_fan_speed': { state: '45' },
           'select.ventilation_mode': { state: 'AUTO' },
@@ -46,14 +51,38 @@ describe('Grow Wardrobe Frontend', () => {
     });
   });
 
-  it('renders environment metrics from Home Assistant', async () => {
+  it('renders environment metrics across all three zones (Canopy, Pot, Ambient)', async () => {
     render(<App />);
 
     await waitFor(() => {
+      // Canopy
       expect(screen.getByText('24.5')).toBeInTheDocument();
       expect(screen.getByText('58.2')).toBeInTheDocument();
       expect(screen.getByText('1.25')).toBeInTheDocument();
-      expect(screen.getByText('38.0')).toBeInTheDocument();
+
+      // Pot
+      expect(screen.getByText('21.0')).toBeInTheDocument();
+      expect(screen.getByText('65.4')).toBeInTheDocument();
+      expect(screen.getByText('0.85')).toBeInTheDocument();
+      expect(screen.getByText(/Moisture: 38.0%/i)).toBeInTheDocument();
+
+      // Ambient
+      expect(screen.getByText('19.8')).toBeInTheDocument();
+      expect(screen.getByText('51.0')).toBeInTheDocument();
+      expect(screen.getByText('1.13')).toBeInTheDocument();
+    });
+  });
+
+  it('renders Fan Dynamics & Intelligence panel with rationale, speed, and differentials', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Fan Dynamics & Intelligence/i)).toBeInTheDocument();
+      expect(screen.getByText(/Why is the fan set to 45%?/i)).toBeInTheDocument();
+      expect(screen.getByText(/Does the difference in VPD define fan speed?/i)).toBeInTheDocument();
+      expect(screen.getByText(/1\. Target VPD Demand/i)).toBeInTheDocument();
+      expect(screen.getByText(/2\. Intake Moisture Δ/i)).toBeInTheDocument();
+      expect(screen.getByText(/3\. Thermal Differential ΔT/i)).toBeInTheDocument();
     });
   });
 

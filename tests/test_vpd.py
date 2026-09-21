@@ -185,3 +185,13 @@ def test_vpd_controller_modes():
     controller.set_mode("AUTO")
     assert controller.mode == "AUTO"
 
+def test_vpd_controller_last_reason():
+    fan = MagicMock()
+    config = {"max_safe_temp": 30.0}
+    controller = VPDController(fan, config)
+    assert controller.last_reason == ""
+    
+    res = controller.evaluate(canopy_temp=32.0, canopy_humidity=50.0)
+    assert controller.last_reason == res
+    assert "OVERRIDE" in controller.last_reason
+

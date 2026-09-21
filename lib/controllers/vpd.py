@@ -38,6 +38,7 @@ class VPDController:
         
         self.integral_error = 0.0
         self.last_vpd = 0.0
+        self.last_reason = ""
 
     def set_mode(self, mode):
         m = str(mode).upper()
@@ -59,13 +60,16 @@ class VPDController:
         # Safety constraints
         if canopy_temp > self.max_safe_temp:
             self.fan.set_speed(100)
-            return f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe. Fan 100%."
+            self.last_reason = f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) > max safe. Fan 100%."
+            return self.last_reason
         if canopy_humidity > cur_max_safe_hum:
             self.fan.set_speed(100)
-            return f"💨 OVERRIDE: Canopy Hum ({canopy_humidity:.1f}%) > max safe ({cur_max_safe_hum:.1f}%). Fan 100%."
+            self.last_reason = f"💨 OVERRIDE: Canopy Hum ({canopy_humidity:.1f}%) > max safe ({cur_max_safe_hum:.1f}%). Fan 100%."
+            return self.last_reason
         if canopy_temp < self.min_safe_temp:
             self.fan.set_speed(cur_min_speed)
-            return f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe. Fan {cur_min_speed}%."
+            self.last_reason = f"💨 OVERRIDE: Canopy Temp ({canopy_temp:.1f}°C) < min safe. Fan {cur_min_speed}%."
+            return self.last_reason
             
         # Leaf VPD calculation
         leaf_temp = canopy_temp - cur_leaf_offset
@@ -99,9 +103,10 @@ class VPDController:
             speed = max(cur_min_speed, min(self.max_speed, int(temp_speed)))
             self.fan.set_speed(speed)
             if speed > cur_min_speed:
-                return f"💨 TEMP OVERRIDE (Clamp Active): Fan {speed}%."
+                self.last_reason = f"💨 TEMP OVERRIDE (Clamp Active): Fan {speed}%."
             else:
-                return f"💨 CLAMP: VPD too humid, but ambient room is wetter. Fan {cur_min_speed}%."
+                self.last_reason = f"💨 CLAMP: VPD too humid, but ambient room is wetter. Fan {cur_min_speed}%."
+            return self.last_reason
         else:
             self.integral_error += self.ki * error * dt_seconds
             max_i = float(self.max_speed - cur_min_speed)
@@ -116,5 +121,6 @@ class VPDController:
             speed = max(int(vpd_speed), int(temp_speed))
             speed = max(cur_min_speed, min(self.max_speed, speed))
             self.fan.set_speed(speed)
-            return f"💨 VPD Loop ({self.mode}): Leaf VPD={vpd_leaf:.2f} (Target={cur_target_vpd:.2f}). Fan {speed}%."
+            self.last_reason = f"💨 VPD Loop ({self.mode}): Leaf VPD={vpd_leaf:.2f} (Target={cur_target_vpd:.2f}). Fan {speed}%."
+            return self.last_reason
 
