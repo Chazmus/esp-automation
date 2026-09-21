@@ -8,6 +8,7 @@ import {
   Timer,
   ShieldCheck,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
 import type { GrowMedium, LightPreset } from '../types';
 import { PhotoperiodSchedule } from './PhotoperiodSchedule';
@@ -40,6 +41,34 @@ interface GrowCustomizationProps {
   onScheduleNextCycle: (delaySeconds: number) => void;
   onScheduleSpecificTime: (timeStr: string) => void;
   onSaveGrowConfig: () => void;
+}
+
+interface SettingTooltipProps {
+  content: string;
+}
+
+function SettingTooltip({ content }: SettingTooltipProps) {
+  return (
+    <span className="relative inline-flex items-center group/tip ml-1.5 align-middle">
+      <button
+        type="button"
+        tabIndex={0}
+        aria-label="More information"
+        title={content}
+        onClick={(e) => e.preventDefault()}
+        className="text-theme-text-dim hover:text-theme-text focus:text-theme-text focus:outline-none transition-colors cursor-help inline-flex items-center"
+      >
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-0 sm:left-1/2 sm:-translate-x-1/2 mb-2 hidden group-hover/tip:block group-focus-within/tip:block z-30 w-56 sm:w-64 p-2.5 bg-theme-elevated/95 backdrop-blur-md text-theme-text border border-theme-border shadow-2xl rounded-xl text-[11px] leading-relaxed font-normal normal-case text-left"
+      >
+        {content}
+        <span className="absolute -bottom-1 left-2 sm:left-1/2 sm:-translate-x-1/2 w-2 h-2 rotate-45 bg-theme-elevated border-r border-b border-theme-border" />
+      </span>
+    </span>
+  );
 }
 
 export function GrowCustomization({
@@ -169,8 +198,9 @@ export function GrowCustomization({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Feed Interval (Hours)
+                <SettingTooltip content="How often the automated high-frequency fertigation cycle runs (e.g. every 4 hours)." />
               </label>
               <input
                 type="number"
@@ -182,8 +212,9 @@ export function GrowCustomization({
               />
             </div>
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Pump Duration (Seconds)
+                <SettingTooltip content="How many seconds the drip irrigation pump runs during each fertigation cycle." />
               </label>
               <input
                 type="number"
@@ -204,8 +235,9 @@ export function GrowCustomization({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Water Trigger Threshold (%)
+                <SettingTooltip content="When soil moisture drops to or below this percentage, an automated watering cycle is triggered." />
               </label>
               <input
                 type="number"
@@ -217,8 +249,9 @@ export function GrowCustomization({
               />
             </div>
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Target Moisture Level (%)
+                <SettingTooltip content="The target soil moisture percentage to achieve. The system stops watering once this level is reached." />
               </label>
               <input
                 type="number"
@@ -230,8 +263,9 @@ export function GrowCustomization({
               />
             </div>
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Soak Cooldown (Minutes)
+                <SettingTooltip content="The mandatory rest period after watering to allow moisture to soak through the root zone before the sensor re-evaluates." />
               </label>
               <input
                 type="number"
@@ -243,8 +277,9 @@ export function GrowCustomization({
               />
             </div>
             <div>
-              <label className="text-xs text-theme-text-muted block mb-1">
+              <label className="text-xs text-theme-text-muted flex items-center mb-1">
                 Safety Max Water Cutoff (Seconds)
+                <SettingTooltip content="The maximum continuous watering time per cycle as a safety cutoff, preventing overwatering or reservoir drain if the sensor fails." />
               </label>
               <input
                 type="number"
@@ -575,6 +610,7 @@ export function GrowCustomization({
                 <div className="flex items-center gap-1.5 text-xs font-medium text-theme-text-muted">
                   <Timer className="w-3.5 h-3.5 text-amber-400" />
                   Soak Cooldown
+                  <SettingTooltip content="Enforced rest period after watering to allow moisture to disperse through the root zone before re-evaluating." />
                 </div>
                 <div className="text-base font-bold text-theme-text">{soilSoakWaitMin} mins</div>
                 <div className="text-[11px] text-theme-text-dim">
@@ -586,6 +622,7 @@ export function GrowCustomization({
                 <div className="flex items-center gap-1.5 text-xs font-medium text-theme-text-muted">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   Safety Runoff Cutoff
+                  <SettingTooltip content="Maximum pump duration per cycle as a safety cutoff to prevent overwatering if the moisture sensor fails." />
                 </div>
                 <div className="text-base font-bold text-theme-text">{soilMaxWaterSec} secs</div>
                 <div className="text-[11px] text-theme-text-dim">

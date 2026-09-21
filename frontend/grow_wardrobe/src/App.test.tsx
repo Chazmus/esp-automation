@@ -225,4 +225,15 @@ describe('Grow Wardrobe Frontend', () => {
       expect(screen.getAllByText(/00:00/i).length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  it('renders helpful tooltips for soil moisture settings', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByText(/Organic Soil/i));
+
+    expect(screen.getByText(/Soak Cooldown \(Minutes\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Safety Max Water Cutoff \(Seconds\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Mandatory rest period after watering/i).length).toBeGreaterThanOrEqual(1);
+  });
 });
