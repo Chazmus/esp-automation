@@ -105,9 +105,14 @@ class AHT10:
         self._buf[2] = 0x00
         self._i2c.writeto(self._address, self._buf[0:3])
 
-    def _wait_for_idle(self):
+    def _wait_for_idle(self, timeout_ms=100):
         """Wait until sensor can receive a new command"""
+        count = 0
+        max_counts = timeout_ms // 5
         while self.status & self.AHTX0_STATUS_BUSY:
+            count += 1
+            if count > max_counts:
+                raise RuntimeError("AHT timeout waiting for idle")
             utime.sleep_ms(5)
 
     def _perform_measurement(self):

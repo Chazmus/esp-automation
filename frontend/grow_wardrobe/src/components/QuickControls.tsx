@@ -76,6 +76,30 @@ export function QuickControls({
     onFanSpeedChange(latestValRef.current);
   };
 
+  // Optimistic local state for instantaneous 0ms button feedback
+  const [localVentMode, setLocalVentMode] = useState<string>(ventMode);
+  const [localIrrMode, setLocalIrrMode] = useState<string>(irrMode);
+
+  useEffect(() => {
+    setLocalVentMode(ventMode);
+  }, [ventMode]);
+
+  useEffect(() => {
+    setLocalIrrMode(irrMode);
+  }, [irrMode]);
+
+  const handleVentToggle = () => {
+    const next = localVentMode === 'AUTO' ? 'MANUAL' : 'AUTO';
+    setLocalVentMode(next);
+    onToggleVentMode();
+  };
+
+  const handleIrrToggle = () => {
+    const next = localIrrMode === 'AUTO' ? 'MANUAL' : 'AUTO';
+    setLocalIrrMode(next);
+    onToggleIrrMode();
+  };
+
   return (
     <section className="bg-theme-card border border-theme-border p-6 rounded-2xl space-y-5 transition-colors">
       <div className="border-b border-theme-border-subtle pb-3">
@@ -92,14 +116,14 @@ export function QuickControls({
           </div>
           <button
             type="button"
-            onClick={onToggleVentMode}
+            onClick={handleVentToggle}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-              ventMode === 'AUTO'
+              localVentMode === 'AUTO'
                 ? 'bg-blue-500/10 border-blue-500/40 text-blue-400'
                 : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
             }`}
           >
-            {ventMode}
+            {localVentMode}
           </button>
         </div>
 
@@ -110,14 +134,14 @@ export function QuickControls({
           </div>
           <button
             type="button"
-            onClick={onToggleIrrMode}
+            onClick={handleIrrToggle}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-              irrMode === 'AUTO'
+              localIrrMode === 'AUTO'
                 ? 'bg-blue-500/10 border-blue-500/40 text-blue-400'
                 : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
             }`}
           >
-            {irrMode}
+            {localIrrMode}
           </button>
         </div>
       </div>

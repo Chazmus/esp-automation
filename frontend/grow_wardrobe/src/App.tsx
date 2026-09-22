@@ -161,17 +161,35 @@ export function App() {
     await setEntityState(connection, 'switch', service, 'switch.agitation_pump');
   };
 
-  const handleToggleVentMode = async () => {
+  const handleToggleVentMode = async (targetMode?: string) => {
     if (!connection) return;
-    const nextMode = controls.ventMode === 'AUTO' ? 'MANUAL' : 'AUTO';
+    const nextMode = targetMode || (controls.ventMode === 'AUTO' ? 'MANUAL' : 'AUTO');
+    setEntities((prev) => ({
+      ...prev,
+      'select.ventilation_mode': {
+        ...prev['select.ventilation_mode'],
+        entity_id: 'select.ventilation_mode',
+        state: nextMode,
+        attributes: { ...prev['select.ventilation_mode']?.attributes },
+      } as any,
+    }));
     await setEntityState(connection, 'select', 'select_option', 'select.ventilation_mode', {
       option: nextMode,
     });
   };
 
-  const handleToggleIrrMode = async () => {
+  const handleToggleIrrMode = async (targetMode?: string) => {
     if (!connection) return;
-    const nextMode = controls.irrMode === 'AUTO' ? 'MANUAL' : 'AUTO';
+    const nextMode = targetMode || (controls.irrMode === 'AUTO' ? 'MANUAL' : 'AUTO');
+    setEntities((prev) => ({
+      ...prev,
+      'select.irrigation_mode': {
+        ...prev['select.irrigation_mode'],
+        entity_id: 'select.irrigation_mode',
+        state: nextMode,
+        attributes: { ...prev['select.irrigation_mode']?.attributes },
+      } as any,
+    }));
     await setEntityState(connection, 'select', 'select_option', 'select.irrigation_mode', {
       option: nextMode,
     });

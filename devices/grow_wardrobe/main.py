@@ -94,15 +94,19 @@ def mqtt_callback(topic, msg):
         raw_mode = msg.upper()
         if raw_mode == "AUTO":
             irrig_mode = "AUTO"
+            print("Switched Irrigation to AUTO.")
         elif raw_mode == "MANUAL":
             irrig_mode = "MANUAL"
             irrig_controller.force_idle()
             print("Switched Irrigation to MANUAL. All pumps stopped.")
-            pub(client, "irrigation/drip/state", "OFF")
-            pub(client, "irrigation/agitate/state", "OFF")
-            pub(client, "irrigation/waste/state", "OFF")
+            pub(client, "irrigation/drip/state", "OFF", retain=True)
+            pub(client, "irrigation/agitate/state", "OFF", retain=True)
+            pub(client, "irrigation/waste/state", "OFF", retain=True)
+            pub(client, "irrigation/phase/state", "IDLE", retain=True)
 
         pub(client, "irrigation/mode/state", irrig_mode, retain=True)
+        pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
+        pub(client, "irrigation/next_cycle/state", str(irrig_controller.get_next_cycle_in_seconds()), retain=True)
             
     elif topic.endswith("irrigation/drip/set") and irrig_mode == "MANUAL":
         drip_relay.on() if msg == "ON" else drip_relay.off()
@@ -178,36 +182,70 @@ def mqtt_callback(topic, msg):
 # --- 4. Network Setup ---
 print("Connecting to WiFi...")
 if wifi.connect():
-    print(f"Connecting to MQTT Broker at {MQTT_BROKER}...")
-    client = MQTTClient(CLIENT_ID, MQTT_BROKER, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60)
-    client.set_callback(mqtt_callback)
-    
-    try:
-        # Set Last Will and Testament for automatic offline detection
-        client.set_last_will(f"{BASE_TOPIC}/status".encode(), b"offline", retain=True)
-        client.connect()
-        # Publish online status
-        pub(client, "status", "online", retain=True)
-        # Subscribe to all command topics
-        client.subscribe(f"{BASE_TOPIC}/config/+/set".encode())
-        client.subscribe(f"{BASE_TOPIC}/+/+/set".encode())
-        client.subscribe(f"{BASE_TOPIC}/+/set".encode())
+    client = None
+    boot_time = time.ticks_ms()
+    last_sensor_read = 0
+    last_ha_post = 0
+    last_ping = boot_time
+    latest_soil_pct = None
+
+    def connect_mqtt():
+        print(f"Connecting to MQTT Broker at {MQTT_BROKER}...")
+        c = MQTTClient(CLIENT_ID, MQTT_BROKER, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60)
+        c.set_callback(mqtt_callback)
+        c.set_last_will(f"{BASE_TOPIC}/status".encode(), b"offline", retain=True)
+        c.connect()
+        pub(c, "status", "online", retain=True)
+        c.subscribe(f"{BASE_TOPIC}/config/+/set".encode())
+        c.subscribe(f"{BASE_TOPIC}/+/+/set".encode())
+        c.subscribe(f"{BASE_TOPIC}/+/set".encode())
         print("✅ MQTT Connected & Subscribed to all /set topics.")
         
         # Publish initial states
-        pub(client, "ventilation/mode/state", vent_mode, retain=True)
-        pub(client, "irrigation/mode/state", irrig_mode, retain=True)
+        pub(c, "ventilation/mode/state", vent_mode, retain=True)
+        pub(c, "irrigation/mode/state", irrig_mode, retain=True)
+        pub(c, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
+        pub(c, "irrigation/next_cycle/state", str(irrig_controller.get_next_cycle_in_seconds()), retain=True)
         for k, v in config_store.config.items():
-            pub(client, f"config/{k}/state", str(v), retain=True)
-        
-        last_sensor_read = 0
-        last_ha_post = 0
-        latest_soil_pct = None
-        
-        # --- 5. Main Loop ---
+            pub(c, f"config/{k}/state", str(v), retain=True)
+        return c
+
+    # --- 5. Main Loop ---
+    try:
         while True:
+            current_time = time.ticks_ms()
+
+            if client is None:
+                try:
+                    client = connect_mqtt()
+                    last_ping = current_time
+                except Exception as e:
+                    print(f"⚠️ MQTT connect failed: {e}. Retrying in 2s...")
+                    time.sleep(2)
+                    continue
+
             # 1. Process inbound MQTT commands
-            client.check_msg()
+            try:
+                client.check_msg()
+            except Exception as e:
+                print(f"⚠️ MQTT check_msg error: {e}. Reconnecting...")
+                try:
+                    client.disconnect()
+                except Exception:
+                    pass
+                client = None
+                time.sleep(1)
+                continue
+
+            # Keepalive ping every 25s so broker never drops connection
+            if time.ticks_diff(current_time, last_ping) > 25000:
+                last_ping = current_time
+                try:
+                    client.ping()
+                except Exception as e:
+                    print(f"⚠️ MQTT ping failed: {e}")
+                    client = None
+                    continue
             
             current_time = time.ticks_ms()
             
@@ -282,23 +320,25 @@ if wifi.connect():
                     pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
                     pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
                     
-            time.sleep(0.1) # Yield to RTOS
+            time.sleep(0.05) # Snappy 50ms loop
             
     except KeyboardInterrupt:
         print("\nExiting. Ensuring safe state...")
         irrig_controller.force_idle()
-        try:
-            pub(client, "status", "offline", retain=True)
-            client.disconnect()
-        except Exception:
-            pass
+        if client:
+            try:
+                pub(client, "status", "offline", retain=True)
+                client.disconnect()
+            except Exception:
+                pass
     except Exception as e:
         print(f"❌ Crash: {e}")
         irrig_controller.force_idle()
-        try:
-            pub(client, "status", "offline", retain=True)
-            client.disconnect()
-        except Exception:
-            pass
+        if client:
+            try:
+                pub(client, "status", "offline", retain=True)
+                client.disconnect()
+            except Exception:
+                pass
 else:
     print("❌ WiFi failed.")

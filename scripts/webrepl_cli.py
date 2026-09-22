@@ -327,6 +327,7 @@ def main():
             print(src_file, "->", dst_file)
 
     s = socket.socket()
+    s.settimeout(15)
 
     ai = socket.getaddrinfo(host, port)
     addr = ai[0][4]

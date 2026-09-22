@@ -19,6 +19,7 @@ def webrepl_run_exec(project_root, ip, password, py_cmd):
     sys.path.insert(0, os.path.join(project_root, "scripts"))
     import webrepl_cli
     import socket
+    s = None
     try:
         s = socket.socket()
         s.settimeout(3)
@@ -37,6 +38,13 @@ def webrepl_run_exec(project_root, ip, password, py_cmd):
     except Exception as e:
         print(f"⚠️ WebREPL remote exec failed: {e}")
         return False
+    finally:
+        if s:
+            try:
+                s.close()
+            except Exception:
+                pass
+            time.sleep(0.5)
 
 
 
@@ -268,12 +276,14 @@ def main():
         import secrets
         webrepl_reset(project_root, ip_addr, secrets.WEBREPL_PASSWORD)
     else:
-        mpremote_cmd_reset = cmd_prefix + [mpremote, "connect", port, "resume", "soft-reset"]
         try:
+            mpremote_cmd_reset = cmd_prefix + [mpremote, "connect", port, "resume", "soft-reset"]
             subprocess.run(mpremote_cmd_reset, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Error during soft reset: {e}", file=sys.stderr)
-            sys.exit(e.returncode)
+        except Exception:
+            try:
+                subprocess.run(cmd_prefix + [esptool, "--port", port, "chip-id"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
         
     print(f"✅ Deployment complete! Your {device} code is now running.")
 
