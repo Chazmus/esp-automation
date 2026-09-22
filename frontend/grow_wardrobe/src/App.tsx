@@ -12,14 +12,19 @@ import type { GrowMedium, LightPreset } from './types';
 import { useGrowMetrics } from './hooks/useGrowMetrics';
 import { useTheme } from './hooks/useTheme';
 import { Header } from './components/Header';
+import { Activity, Wind, Sliders } from 'lucide-react';
 import { EnvironmentOverview } from './components/EnvironmentOverview';
+import { HistoricalSensorChart } from './components/HistoricalSensorChart';
 import { FanDynamicsPanel } from './components/FanDynamicsPanel';
 import { GrowCustomization } from './components/GrowCustomization';
 import { QuickControls } from './components/QuickControls';
 import { SettingsModal } from './components/SettingsModal';
 
+export type AppTab = 'sensors' | 'fan' | 'config';
+
 export function App() {
   const { theme, setTheme } = useTheme();
+  const [activeTab, setActiveTab] = useState<AppTab>('sensors');
   const [haConfig, setHaConfig] = useState(getStoredHaConfig());
   const [connection, setConnection] = useState<Connection | null>(null);
   const [entities, setEntities] = useState<HassEntities>({});
@@ -248,14 +253,67 @@ export function App() {
           onOpenSettings={() => setShowSettings(true)}
         />
 
-        {/* Multi-Zone Climate Overview */}
-        <EnvironmentOverview metrics={environmentMetrics} />
+        {/* Tab Navigation Bar */}
+        <nav aria-label="Dashboard sections" className="flex items-center gap-2 p-1.5 bg-theme-card border border-theme-border rounded-2xl shadow-xs overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('sensors')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+              activeTab === 'sensors'
+                ? 'bg-theme-elevated text-theme-text shadow-sm border border-theme-border-elevated'
+                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface/50'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span>Sensor Telemetry</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-800/80 text-emerald-300 font-normal">
+              Live
+            </span>
+          </button>
 
-        {/* Fan Dynamics & Intelligence Panel */}
-        <FanDynamicsPanel dynamics={fanDynamics} />
+          <button
+            onClick={() => setActiveTab('fan')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+              activeTab === 'fan'
+                ? 'bg-theme-elevated text-theme-text shadow-sm border border-theme-border-elevated'
+                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface/50'
+            }`}
+          >
+            <Wind className="w-4 h-4 text-indigo-400" />
+            <span>Fan Dynamics</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-800/80 text-indigo-300 font-normal">
+              {controls.fanSpeed}%
+            </span>
+          </button>
 
-        {/* Main Content: Grow Customization & Quick Controls */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <button
+            onClick={() => setActiveTab('config')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+              activeTab === 'config'
+                ? 'bg-theme-elevated text-theme-text shadow-sm border border-theme-border-elevated'
+                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface/50'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-amber-400" />
+            <span>Grow Config & Controls</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-800/80 text-amber-300 font-normal uppercase">
+              {growMedium}
+            </span>
+          </button>
+        </nav>
+
+        {/* Tab 1: Sensor Telemetry (Multi-zone Overview + Historical Charts) */}
+        <div className={activeTab === 'sensors' ? 'space-y-6' : 'hidden'}>
+          <EnvironmentOverview metrics={environmentMetrics} />
+          <HistoricalSensorChart connection={connection} entities={entities} />
+        </div>
+
+        {/* Tab 2: Fan Dynamics & Airflow Intelligence */}
+        <div className={activeTab === 'fan' ? 'space-y-6' : 'hidden'}>
+          <FanDynamicsPanel dynamics={fanDynamics} />
+        </div>
+
+        {/* Tab 3: Grow Setup, Customization & Controls */}
+        <div className={activeTab === 'config' ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'hidden'}>
           <GrowCustomization
             growMedium={growMedium}
             setGrowMedium={setGrowMedium}

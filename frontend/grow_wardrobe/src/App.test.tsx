@@ -13,6 +13,7 @@ vi.mock('./ha', async () => {
     sendMqttCommand: vi.fn().mockResolvedValue(undefined),
     setEntityState: vi.fn().mockResolvedValue(undefined),
     subscribeMqttTopic: vi.fn().mockResolvedValue(() => Promise.resolve()),
+    fetchSensorHistory: vi.fn().mockResolvedValue({}),
   };
 });
 
@@ -235,5 +236,68 @@ describe('Grow Wardrobe Frontend', () => {
     expect(screen.getByText(/Soak Cooldown \(Minutes\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Safety Max Water Cutoff \(Seconds\)/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Mandatory rest period after watering/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders historical sensor telemetry chart with dual-axis controls, zones, and time ranges', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Historical Telemetry')).toBeInTheDocument();
+      expect(screen.getByText('Synchronized')).toBeInTheDocument();
+      expect(screen.getByText(/Temperature Dynamics/i)).toBeInTheDocument();
+      expect(screen.getByText(/Humidity & Moisture Dynamics/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /All Zones/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Canopy$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Pot & Soil/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Ambient$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '6h' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '24h' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '7d' })).toBeInTheDocument();
+    });
+
+    // Test zone filtering
+    const canopyFilterBtn = screen.getByRole('button', { name: /^Canopy$/i });
+    await user.click(canopyFilterBtn);
+
+    // Test time range selection
+    const range12hBtn = screen.getByRole('button', { name: '12h' });
+    await user.click(range12hBtn);
+
+    // Series toggles exist
+    expect(screen.getByRole('button', { name: /^Canopy Temp/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Canopy RH/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Pot Temp/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Soil Moisture/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Ambient Temp/i })).toBeInTheDocument();
+  });
+
+  it('navigates seamlessly between Sensor Telemetry, Fan Dynamics, and Grow Config tabs', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Sensor Telemetry/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Fan Dynamics/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Grow Config & Controls/i })).toBeInTheDocument();
+    });
+
+    // Default tab is sensors
+    expect(screen.getByText('Historical Telemetry')).toBeVisible();
+
+    // Switch to Fan Dynamics
+    const fanTabBtn = screen.getByRole('button', { name: /Fan Dynamics/i });
+    await user.click(fanTabBtn);
+    expect(screen.getByText(/Why is the fan set to 45%?/i)).toBeVisible();
+
+    // Switch to Grow Config
+    const configTabBtn = screen.getByRole('button', { name: /Grow Config & Controls/i });
+    await user.click(configTabBtn);
+    expect(screen.getByRole('button', { name: /Apply Strategy to Wardrobe/i })).toBeVisible();
+
+    // Switch back to Sensor Telemetry
+    const sensorTabBtn = screen.getByRole('button', { name: /Sensor Telemetry/i });
+    await user.click(sensorTabBtn);
+    expect(screen.getByText('Historical Telemetry')).toBeVisible();
   });
 });

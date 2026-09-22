@@ -47,3 +47,39 @@ export interface FanDynamicsData {
   ambientTemp: string;
   tempDiff: number | null;
 }
+
+export type HistoryZoneFilter = 'all' | 'canopy' | 'pot' | 'ambient';
+
+export interface HistoryDataPoint {
+  timestamp: number;
+  timeLabel: string;
+  canopyTemp: number | null;
+  canopyHumidity: number | null;
+  canopyVpd: number | null;
+  potTemp: number | null;
+  potHumidity: number | null;
+  soilMoisture: number | null;
+  ambientTemp: number | null;
+  ambientHumidity: number | null;
+}
+
+export type SensorSeriesKey =
+  | 'canopyTemp'
+  | 'canopyHumidity'
+  | 'potTemp'
+  | 'potHumidity'
+  | 'soilMoisture'
+  | 'ambientTemp'
+  | 'ambientHumidity';
+
+export interface SensorSeriesMeta {
+  key: SensorSeriesKey;
+  name: string;
+  zone: 'canopy' | 'pot' | 'ambient';
+  type: 'temp' | 'humidity' | 'moisture';
+  unit: string;
+  color: string;
+  yAxisId: 'temp' | 'hum';
+  strokeDasharray?: string;
+  strokeWidth?: number;
+}

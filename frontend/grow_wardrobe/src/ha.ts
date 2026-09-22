@@ -116,3 +116,33 @@ export function subscribeMqttTopic(
     }
   );
 }
+
+export interface HaHistoryState {
+  s?: string;
+  state?: string;
+  lu?: number;
+  last_changed?: string;
+  last_updated?: string;
+}
+
+export type HaHistoryResponse = Record<string, HaHistoryState[]>;
+
+export async function fetchSensorHistory(
+  conn: Connection,
+  entityIds: string[],
+  startTime: Date,
+  endTime?: Date
+): Promise<HaHistoryResponse> {
+  if (!conn || typeof conn.sendMessagePromise !== 'function') {
+    return {};
+  }
+  return conn.sendMessagePromise<HaHistoryResponse>({
+    type: 'history/history_during_period',
+    start_time: startTime.toISOString(),
+    end_time: endTime ? endTime.toISOString() : undefined,
+    entity_ids: entityIds,
+    minimal_response: true,
+    no_attributes: true,
+    significant_changes_only: false,
+  });
+}

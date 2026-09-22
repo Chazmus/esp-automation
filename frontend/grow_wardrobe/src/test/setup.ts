@@ -21,3 +21,14 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: mockLocalStorage,
   writable: true,
 });
+
+// Mock ResizeObserver for Recharts ResponsiveContainer in jsdom
+if (typeof window !== 'undefined' && !window.ResizeObserver) {
+  class MockResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  window.ResizeObserver = MockResizeObserver as any;
+  (globalThis as any).ResizeObserver = MockResizeObserver;
+}
