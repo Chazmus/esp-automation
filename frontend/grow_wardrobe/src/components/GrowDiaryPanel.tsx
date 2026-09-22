@@ -84,6 +84,7 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
     deleteEntry,
     uploadPhoto,
     seedSampleData,
+    clearDiary,
   } = useGrowDiary();
 
   // Modals state
@@ -432,6 +433,24 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
                   );
                 })()}
 
+                {/* Sample Data clear badge */}
+                {activeRun.strain.includes('Mimosa x Orange Punch') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Clear sample test data and return to a clean empty diary?')) {
+                        clearDiary();
+                      }
+                    }}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-700/80 text-amber-300 hover:bg-rose-950/60 hover:border-rose-700 hover:text-rose-200 transition font-medium cursor-pointer"
+                    title="Clear sample test data"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Sample Data Active</span>
+                    <span className="text-[10px] underline ml-1 text-amber-200">Clear Data</span>
+                  </button>
+                )}
+
                 {/* Multi-run switcher */}
                 {store.runs.length > 1 && (
                   <select
@@ -513,6 +532,24 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
                 className="p-2.5 rounded-xl bg-theme-surface hover:bg-theme-elevated border border-theme-border-subtle text-theme-text-muted hover:text-theme-text transition cursor-pointer"
               >
                 <Layers className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => {
+                  const isSample = activeRun.strain.includes('Mimosa x Orange Punch');
+                  const msg = isSample
+                    ? 'Remove the sample grow data and reset to a clean empty diary?'
+                    : `Delete "${activeRun.strain}" and all logged entries?${
+                        store.runs.length === 1 ? ' (This will reset the diary to empty so you can start fresh.)' : ''
+                      }`;
+                  if (window.confirm(msg)) {
+                    deleteRun(activeRun.id);
+                  }
+                }}
+                title="Delete this grow run"
+                className="p-2.5 rounded-xl bg-theme-surface hover:bg-rose-950/40 border border-theme-border-subtle text-theme-text-muted hover:text-rose-400 transition cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
               </button>
 
               <button
@@ -1366,18 +1403,22 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-theme-border-subtle">
-                {editingRun && store.runs.length > 1 ? (
+                {editingRun ? (
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm(`Delete ${editingRun.strain}? All associated entries will be removed.`)) {
+                      const isOnly = store.runs.length === 1;
+                      const msg = isOnly
+                        ? `Delete "${editingRun.strain}"? This will reset the diary to a clean empty state so you can start fresh.`
+                        : `Delete "${editingRun.strain}"? All associated log entries will be removed.`;
+                      if (window.confirm(msg)) {
                         deleteRun(editingRun.id);
                         setShowRunModal(false);
                       }
                     }}
                     className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
                   >
-                    Delete Run
+                    {store.runs.length === 1 ? 'Delete Run & Reset to Empty' : 'Delete Run'}
                   </button>
                 ) : (
                   <div />

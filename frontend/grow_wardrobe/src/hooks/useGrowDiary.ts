@@ -263,6 +263,15 @@ export function useGrowDiary() {
     [store, saveStore]
   );
 
+  const clearDiary = useCallback(async () => {
+    const emptyStore: GrowDiaryStore = {
+      runs: [],
+      activeRunId: null,
+      entries: [],
+    };
+    await saveStore(emptyStore);
+  }, [saveStore]);
+
   // Entry actions
   const addEntry = useCallback(
     async (
@@ -465,5 +474,6 @@ export function useGrowDiary() {
     deleteEntry,
     uploadPhoto,
     seedSampleData,
+    clearDiary,
   };
 }

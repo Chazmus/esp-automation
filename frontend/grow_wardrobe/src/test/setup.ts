@@ -1,7 +1,22 @@
 import '@testing-library/jest-dom/vitest';
+import { afterEach, vi } from 'vitest';
+
+// Mock default fetch for unit tests
+vi.stubGlobal(
+  'fetch',
+  vi.fn().mockImplementation(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ runs: [], activeRunId: null, entries: [] }),
+    })
+  )
+);
 
 // Node 25+ has an experimental global localStorage that can conflict with jsdom
 const store = new Map<string, string>();
+afterEach(() => {
+  store.clear();
+});
 const mockLocalStorage = {
   getItem: (key: string) => store.get(key) ?? null,
   setItem: (key: string, value: string) => store.set(key, String(value)),

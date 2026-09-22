@@ -78,6 +78,32 @@ describe('GrowDiaryPanel Component', () => {
     expect(screen.getByText(/Topped at Node 5 & Light Defoliation/i)).toBeInTheDocument();
   });
 
+  it('allows clearing the sample test data or deleting a run to return to the welcome screen', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<GrowDiaryPanel environmentMetrics={mockMetrics} controls={mockControls} />);
+
+    // Load sample data
+    const sampleBtn = screen.getByRole('button', { name: /Load Sample Diary/i });
+    await user.click(sampleBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Mimosa x Orange Punch')).toBeInTheDocument();
+    });
+
+    // Clear Data button should be visible
+    const clearBtn = screen.getByRole('button', { name: /Sample Data Active/i });
+    expect(clearBtn).toBeInTheDocument();
+
+    // Click Clear Data
+    await user.click(clearBtn);
+
+    // Should return to welcome screen
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome to Grow Wardrobe Diary/i)).toBeInTheDocument();
+    });
+  });
+
   it('allows filtering entries by tags and search queries', async () => {
     const user = userEvent.setup();
     render(<GrowDiaryPanel environmentMetrics={mockMetrics} controls={mockControls} />);
