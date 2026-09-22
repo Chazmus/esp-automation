@@ -272,7 +272,7 @@ describe('Grow Wardrobe Frontend', () => {
     expect(screen.getByRole('button', { name: /^Ambient Temp/i })).toBeInTheDocument();
   });
 
-  it('navigates seamlessly between Sensor Telemetry, Fan Dynamics, and Grow Config tabs', async () => {
+  it('navigates seamlessly between Sensor Telemetry, Fan Dynamics, Grow Config, and Grow Diary tabs', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -280,6 +280,7 @@ describe('Grow Wardrobe Frontend', () => {
       expect(screen.getByRole('button', { name: /Sensor Telemetry/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Fan Dynamics/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Grow Config & Controls/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Grow Diary/i })).toBeInTheDocument();
     });
 
     // Default tab is sensors
@@ -294,6 +295,11 @@ describe('Grow Wardrobe Frontend', () => {
     const configTabBtn = screen.getByRole('button', { name: /Grow Config & Controls/i });
     await user.click(configTabBtn);
     expect(screen.getByRole('button', { name: /Apply Strategy to Wardrobe/i })).toBeVisible();
+
+    // Switch to Grow Diary
+    const diaryTabBtn = screen.getByRole('button', { name: /Grow Diary/i });
+    await user.click(diaryTabBtn);
+    expect(screen.getByText(/Welcome to Grow Wardrobe Diary/i)).toBeVisible();
 
     // Switch back to Sensor Telemetry
     const sensorTabBtn = screen.getByRole('button', { name: /Sensor Telemetry/i });

@@ -12,15 +12,16 @@ import type { GrowMedium, LightPreset } from './types';
 import { useGrowMetrics } from './hooks/useGrowMetrics';
 import { useTheme } from './hooks/useTheme';
 import { Header } from './components/Header';
-import { Activity, Wind, Sliders } from 'lucide-react';
+import { Activity, Wind, Sliders, BookOpen } from 'lucide-react';
 import { EnvironmentOverview } from './components/EnvironmentOverview';
 import { HistoricalSensorChart } from './components/HistoricalSensorChart';
 import { FanDynamicsPanel } from './components/FanDynamicsPanel';
 import { GrowCustomization } from './components/GrowCustomization';
 import { QuickControls } from './components/QuickControls';
 import { SettingsModal } from './components/SettingsModal';
+import { GrowDiaryPanel } from './components/GrowDiaryPanel';
 
-export type AppTab = 'sensors' | 'fan' | 'config';
+export type AppTab = 'sensors' | 'fan' | 'config' | 'diary';
 
 export function App() {
   const { theme, setTheme } = useTheme();
@@ -299,6 +300,18 @@ export function App() {
               {growMedium}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('diary')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
+              activeTab === 'diary'
+                ? 'bg-theme-elevated text-theme-text shadow-sm border border-theme-border-elevated'
+                : 'text-theme-text-muted hover:text-theme-text hover:bg-theme-surface/50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <span>Grow Diary</span>
+          </button>
         </nav>
 
         {/* Tab 1: Sensor Telemetry (Multi-zone Overview + Historical Charts) */}
@@ -357,6 +370,15 @@ export function App() {
             onToggleDripPump={handleToggleDripPump}
             onToggleAgitationPump={handleToggleAgitationPump}
             onToggleWastePump={handleToggleWastePump}
+          />
+        </div>
+
+        {/* Tab 4: Grow Diary & Timeline Stream */}
+        <div className={activeTab === 'diary' ? 'space-y-6' : 'hidden'}>
+          <GrowDiaryPanel
+            environmentMetrics={environmentMetrics}
+            controls={controls}
+            lightPreset={lightPreset}
           />
         </div>
 

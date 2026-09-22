@@ -83,3 +83,79 @@ export interface SensorSeriesMeta {
   strokeDasharray?: string;
   strokeWidth?: number;
 }
+
+export type GrowPhase =
+  | 'germination'
+  | 'seedling'
+  | 'vegetative'
+  | 'transition'
+  | 'flowering'
+  | 'flush'
+  | 'harvest'
+  | 'curing';
+
+export interface GrowRun {
+  id: string;
+  name: string;
+  strain: string;
+  breeder?: string;
+  medium: GrowMedium;
+  startDate: string; // ISO string e.g. "2026-08-15"
+  flipDate?: string | null; // ISO string when flipped to 12/12
+  harvestDate?: string | null;
+  targetFlowerDays?: number; // e.g. 63
+  potSizeLiters?: number;
+  notes?: string;
+  isActive: boolean;
+}
+
+export type DiaryEntryTag =
+  | 'watering'
+  | 'nutrients'
+  | 'training'
+  | 'defoliation'
+  | 'flipto1212'
+  | 'flush'
+  | 'trichomes'
+  | 'pest_check'
+  | 'milestone'
+  | 'general';
+
+export interface DiaryTelemetrySnapshot {
+  canopyTemp?: string;
+  canopyHumidity?: string;
+  canopyVpd?: string;
+  potTemp?: string;
+  potHumidity?: string;
+  soilMoisture?: string;
+  fanSpeed?: string;
+}
+
+export interface DiaryEntry {
+  id: string;
+  runId: string;
+  timestamp: number;
+  dateStr: string;
+  dayNumber: number;
+  flowerDayNumber?: number | null;
+  phase: GrowPhase;
+  title: string;
+  note: string;
+  tags: DiaryEntryTag[];
+  photoUrl?: string | null;
+  nutrientEc?: number | null;
+  nutrientPh?: number | null;
+  runoffEc?: number | null;
+  runoffPh?: number | null;
+  waterAmountLiters?: number | null;
+  trichomeClearPct?: number | null;
+  trichomeCloudyPct?: number | null;
+  trichomeAmberPct?: number | null;
+  telemetry?: DiaryTelemetrySnapshot;
+}
+
+export interface GrowDiaryStore {
+  runs: GrowRun[];
+  activeRunId: string | null;
+  entries: DiaryEntry[];
+}
