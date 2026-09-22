@@ -107,6 +107,9 @@ export interface GrowRun {
   potSizeLiters?: number;
   notes?: string;
   isActive: boolean;
+  isArchived?: boolean;
+  yieldGrams?: number | null;
+  rating?: number | null;
 }
 
 export type DiaryEntryTag =

@@ -24,6 +24,12 @@ import {
   TrendingUp,
   Layers,
   AlertCircle,
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  FolderOpen,
+  Scale,
+  Star,
 } from 'lucide-react';
 
 interface GrowDiaryPanelProps {
@@ -78,6 +84,9 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
     createRun,
     updateRun,
     setActiveRun,
+    selectRun,
+    archiveRun,
+    unarchiveRun,
     deleteRun,
     addEntry,
     updateEntry,
@@ -92,6 +101,8 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
   const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);
   const [showRunModal, setShowRunModal] = useState(false);
   const [editingRun, setEditingRun] = useState<GrowRun | null>(null);
+  const [showHarvestModal, setShowHarvestModal] = useState(false);
+  const [harvestRunTarget, setHarvestRunTarget] = useState<GrowRun | null>(null);
   const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string; day?: number } | null>(null);
 
   // Filters & search
@@ -155,6 +166,60 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
   const runTargetFlowerDaysInputId = useId();
   const runPotSizeInputId = useId();
   const runNotesTextareaId = useId();
+
+  // Harvest Form state
+  const [harvestDate, setHarvestDate] = useState(todayStr);
+  const [harvestYieldGrams, setHarvestYieldGrams] = useState('');
+  const [harvestRating, setHarvestRating] = useState<number>(5);
+  const [harvestNotes, setHarvestNotes] = useState('');
+  const harvestDateInputId = useId();
+  const harvestYieldInputId = useId();
+  const harvestNotesInputId = useId();
+
+  const handleOpenHarvestModal = (run: GrowRun) => {
+    setHarvestRunTarget(run);
+    setHarvestDate(run.harvestDate || todayStr);
+    setHarvestYieldGrams(run.yieldGrams ? String(run.yieldGrams) : '');
+    setHarvestRating(run.rating || 5);
+    setHarvestNotes('');
+    setShowHarvestModal(true);
+  };
+
+  const handleSaveHarvest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!harvestRunTarget) return;
+
+    const yieldNum = harvestYieldGrams ? parseFloat(harvestYieldGrams) : null;
+    await archiveRun(harvestRunTarget.id, {
+      harvestDate,
+      yieldGrams: yieldNum,
+      rating: harvestRating,
+      notes: harvestNotes.trim() || undefined,
+    });
+
+    // Auto-create a milestone entry for harvest day!
+    await addEntry({
+      runId: harvestRunTarget.id,
+      dateStr: harvestDate,
+      phase: 'harvest',
+      title: 'Harvest Day Chop & Hang',
+      note: harvestNotes.trim()
+        ? `Plant harvested and hung to dry. ${harvestNotes.trim()}${yieldNum ? ` Dry yield: ${yieldNum}g.` : ''}`
+        : `Plant harvested and hung to dry.${yieldNum ? ` Dry yield: ${yieldNum}g.` : ''}`,
+      tags: ['milestone'],
+      telemetry: {
+        canopyTemp: environmentMetrics.canopy.temp,
+        canopyHumidity: environmentMetrics.canopy.humidity,
+        canopyVpd: environmentMetrics.canopy.vpd,
+        potTemp: environmentMetrics.pot.temp,
+        potHumidity: environmentMetrics.pot.humidity,
+        soilMoisture: environmentMetrics.pot.moisture,
+        fanSpeed: controls.fanSpeed.toString(),
+      },
+    });
+
+    setShowHarvestModal(false);
+  };
 
   // Open modal for new entry
   const handleOpenNewEntry = () => {
@@ -410,6 +475,16 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
             {/* Left: Strain & Run Meta */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectRun(null)}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl bg-theme-surface hover:bg-theme-elevated border border-theme-border-subtle text-theme-text-muted hover:text-theme-text transition cursor-pointer"
+                  title="View all grow cycles and archive hub"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>All Grows</span>
+                </button>
+
                 <span className="text-xs px-2.5 py-1 rounded-full bg-theme-elevated border border-theme-border-elevated text-theme-text-muted font-mono">
                   {activeRun.name}
                 </span>
@@ -421,14 +496,20 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
 
                 {/* Phase badge */}
                 {(() => {
-                  const currentPhase: GrowPhase = flowerDays ? 'flowering' : totalDays <= 14 ? 'seedling' : 'vegetative';
+                  const currentPhase: GrowPhase = activeRun.isArchived
+                    ? 'harvest'
+                    : flowerDays
+                    ? 'flowering'
+                    : totalDays <= 14
+                    ? 'seedling'
+                    : 'vegetative';
                   const phaseInfo = PHASE_CONFIG[currentPhase];
                   return (
                     <span
                       className={`text-xs px-3 py-1 rounded-full border font-semibold flex items-center gap-1.5 ${phaseInfo.badgeBg} ${phaseInfo.badgeBorder} ${phaseInfo.color}`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                      {phaseInfo.label}
+                      {activeRun.isArchived ? 'Archived' : phaseInfo.label}
                     </span>
                   );
                 })()}
@@ -452,18 +533,32 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
                 )}
 
                 {/* Multi-run switcher */}
-                {store.runs.length > 1 && (
+                {store.runs.length > 0 && (
                   <select
                     value={activeRun.id}
-                    onChange={(e) => setActiveRun(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value === '__all__') {
+                        selectRun(null);
+                      } else if (e.target.value === '__new__') {
+                        handleOpenRunModal();
+                      } else {
+                        selectRun(e.target.value);
+                      }
+                    }}
                     aria-label="Select active grow run"
                     className="text-xs bg-theme-elevated border border-theme-border-elevated text-theme-text rounded-lg px-2 py-1 outline-hidden cursor-pointer"
                   >
-                    {store.runs.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        Switch: {r.strain} ({r.name})
-                      </option>
-                    ))}
+                    <optgroup label="Switch Grow Run">
+                      {store.runs.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.isArchived ? '📦 ' : r.isActive ? '🟢 ' : '🪴 '} {r.strain} ({r.name})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Navigation & Actions">
+                      <option value="__all__">📁 View All Grows & Archive Hub</option>
+                      <option value="__new__">+ Start New Grow Run...</option>
+                    </optgroup>
                   </select>
                 )}
               </div>
@@ -518,6 +613,26 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
               </div>
 
               {/* Action Buttons */}
+              {activeRun.isArchived ? (
+                <button
+                  onClick={() => unarchiveRun(activeRun.id)}
+                  title="Reactivate this grow run"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition cursor-pointer"
+                >
+                  <ArchiveRestore className="w-3.5 h-3.5" />
+                  <span>Reactivate</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleOpenHarvestModal(activeRun)}
+                  title="Harvest and archive this grow run"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900/60 transition cursor-pointer"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Harvest & Archive</span>
+                </button>
+              )}
+
               <button
                 onClick={() => handleOpenRunModal(activeRun)}
                 title="Edit Run details"
@@ -562,8 +677,38 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
             </div>
           </div>
 
+          {/* Archived Grow Banner (if viewing an archived run) */}
+          {activeRun.isArchived && (
+            <div className="mt-4 pt-3 border-t border-theme-border-subtle flex flex-wrap items-center justify-between gap-3 text-xs text-purple-300 bg-purple-950/20 p-3 rounded-2xl border border-purple-800/40">
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-purple-400" />
+                <span>
+                  <strong>Archived Grow Run</strong> • Harvested on {activeRun.harvestDate || 'Complete'}
+                  {activeRun.yieldGrams ? ` • Final Yield: ${activeRun.yieldGrams}g dry` : ''}
+                  {activeRun.rating ? ` • Rating: ${'★'.repeat(activeRun.rating)}` : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectRun(null)}
+                  className="text-xs text-purple-300 hover:text-white underline cursor-pointer"
+                >
+                  View Archive Hub
+                </button>
+                <button
+                  type="button"
+                  onClick={() => unarchiveRun(activeRun.id)}
+                  className="px-2.5 py-1 rounded-lg bg-purple-800/80 hover:bg-purple-700 text-white font-medium cursor-pointer"
+                >
+                  Reactivate Grow
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Flowering Progress Bar (if in bloom) */}
-          {flowerDays !== null && (
+          {flowerDays !== null && !activeRun.isArchived && (
             <div className="mt-5 pt-4 border-t border-theme-border-subtle">
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-theme-text-muted flex items-center gap-1.5">
@@ -580,6 +725,173 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
               </div>
             </div>
           )}
+        </div>
+      ) : store.runs.length > 0 ? (
+        /* Archive & All Grows Hub */
+        <div className="space-y-6">
+          <div className="bg-theme-card border border-theme-border rounded-3xl p-6 shadow-sm backdrop-blur-md relative overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-theme-surface border border-theme-border-subtle text-emerald-400">
+                    <FolderOpen className="w-5 h-5" />
+                  </span>
+                  <h2 className="text-2xl font-bold tracking-tight text-theme-text">Grow Cycles & Archive</h2>
+                </div>
+                <p className="text-xs text-theme-text-muted">
+                  {store.runs.length} grow cycle{store.runs.length > 1 ? 's' : ''} tracked. Open any grow to inspect its diary timeline, climate telemetry, and photos.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {store.runs.some((r) => r.isActive && !r.isArchived) && (
+                  <button
+                    onClick={() => {
+                      const active = store.runs.find((r) => r.isActive && !r.isArchived);
+                      if (active) selectRun(active.id);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition cursor-pointer"
+                  >
+                    <span>Resume Active Grow</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleOpenRunModal()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-theme-elevated hover:bg-theme-hover border border-theme-border text-theme-text transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  <span>New Grow Run</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid of Runs & Archives */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {store.runs.map((run) => {
+              const runEntries = store.entries.filter((e) => e.runId === run.id);
+              const photoCount = runEntries.filter((e) => e.photoUrl).length;
+              const daysTotal = calculateDaysBetween(run.startDate, run.harvestDate || undefined);
+              const isCurrentActive = run.isActive && !run.isArchived;
+
+              return (
+                <div
+                  key={run.id}
+                  className={`bg-theme-card border rounded-3xl p-5 shadow-xs transition hover:border-theme-border-elevated flex flex-col justify-between space-y-4 ${
+                    isCurrentActive ? 'border-emerald-500/50 ring-1 ring-emerald-500/20' : 'border-theme-border'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      {isCurrentActive ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-700/80 text-emerald-300 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Active Tent Grow
+                        </span>
+                      ) : run.isArchived || run.harvestDate ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-950/40 border border-purple-800/60 text-purple-300 font-medium flex items-center gap-1">
+                          <Archive className="w-3 h-3" />
+                          Harvested & Archived
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-theme-elevated text-theme-text-muted font-medium">
+                          Standby
+                        </span>
+                      )}
+
+                      <span className="text-[11px] font-mono text-theme-text-dim">
+                        {run.name}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl font-bold text-theme-text tracking-tight flex items-center gap-2">
+                        {run.strain}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-theme-text-muted">
+                        {run.breeder && <span>{run.breeder} • </span>}
+                        <span className="capitalize">{run.medium === 'coco' ? '🥥 Coco' : '🪴 Soil'}</span>
+                        <span>• {daysTotal} days</span>
+                      </div>
+                    </div>
+
+                    {run.notes && (
+                      <p className="text-xs text-theme-text-muted line-clamp-2 bg-theme-surface/40 p-2.5 rounded-xl border border-theme-border-subtle">
+                        {run.notes}
+                      </p>
+                    )}
+
+                    {/* Stats pills */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-theme-text-dim pt-1">
+                      <span className="px-2 py-1 rounded-lg bg-theme-surface border border-theme-border-subtle">
+                        📝 {runEntries.length} entries
+                      </span>
+                      {photoCount > 0 && (
+                        <span className="px-2 py-1 rounded-lg bg-theme-surface border border-theme-border-subtle">
+                          📸 {photoCount} photos
+                        </span>
+                      )}
+                      {run.yieldGrams && (
+                        <span className="px-2 py-1 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 font-semibold flex items-center gap-1">
+                          <Scale className="w-3 h-3" /> {run.yieldGrams}g dry
+                        </span>
+                      )}
+                      {run.rating && (
+                        <span className="px-2 py-1 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 font-semibold flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {run.rating}/5
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="pt-3 border-t border-theme-border-subtle flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenRunModal(run)}
+                        title="Edit Run details"
+                        className="p-1.5 rounded-lg hover:bg-theme-elevated text-theme-text-muted hover:text-theme-text transition cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Permanently delete ${run.strain} and all its entries?`)) {
+                            deleteRun(run.id);
+                          }
+                        }}
+                        title="Delete Run"
+                        className="p-1.5 rounded-lg hover:bg-rose-950/40 text-theme-text-muted hover:text-rose-400 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!isCurrentActive && (
+                        <button
+                          onClick={() => setActiveRun(run.id)}
+                          title="Set as active tent grow"
+                          className="px-3 py-1.5 rounded-xl text-xs font-medium bg-theme-surface hover:bg-theme-elevated border border-theme-border text-theme-text-muted hover:text-theme-text transition cursor-pointer"
+                        >
+                          Set Active
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => selectRun(run.id)}
+                        className="flex items-center gap-1 px-4 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition cursor-pointer"
+                      >
+                        <span>Open Diary</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         /* Empty State / Welcome Screen */
@@ -1439,6 +1751,123 @@ export function GrowDiaryPanel({ environmentMetrics, controls }: GrowDiaryPanelP
                     {editingRun ? 'Update Run' : 'Start Run'}
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Harvest & Archive Modal */}
+      {showHarvestModal && harvestRunTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-theme-card border border-theme-border rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 my-8 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-theme-border-subtle pb-4">
+              <h3 className="text-lg font-bold text-theme-text flex items-center gap-2">
+                <Archive className="w-5 h-5 text-purple-400" />
+                Harvest & Archive: {harvestRunTarget.strain}
+              </h3>
+              <button
+                onClick={() => setShowHarvestModal(false)}
+                className="p-1 rounded-lg text-theme-text-muted hover:text-theme-text hover:bg-theme-surface"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveHarvest} className="space-y-4">
+              <div className="bg-purple-950/30 border border-purple-800/40 rounded-2xl p-3.5 text-xs text-purple-200">
+                Congratulations on finishing your grow cycle! Archiving marks this plant as harvested and moves it to your permanent grow archive while keeping all photos, notes, and climate history accessible anytime.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor={harvestDateInputId} className="block text-xs font-semibold text-theme-text-muted mb-1">
+                    Harvest Date
+                  </label>
+                  <input
+                    id={harvestDateInputId}
+                    type="date"
+                    value={harvestDate}
+                    onChange={(e) => setHarvestDate(e.target.value)}
+                    required
+                    className="w-full bg-theme-surface border border-theme-border rounded-xl px-3 py-2 text-sm text-theme-text outline-hidden focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor={harvestYieldInputId} className="block text-xs font-semibold text-theme-text-muted mb-1">
+                    Final Yield (Dry Grams, Optional)
+                  </label>
+                  <input
+                    id={harvestYieldInputId}
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 145"
+                    value={harvestYieldGrams}
+                    onChange={(e) => setHarvestYieldGrams(e.target.value)}
+                    className="w-full bg-theme-surface border border-theme-border rounded-xl px-3 py-2 text-sm text-theme-text outline-hidden focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Quality Rating */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-theme-text-muted">
+                  Overall Harvest Rating / Smoke Quality
+                </label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setHarvestRating(star)}
+                      className="p-1 transition hover:scale-110 cursor-pointer"
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          star <= harvestRating
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-theme-border-elevated'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs text-theme-text-muted ml-2 font-medium">
+                    {harvestRating} of 5 Stars
+                  </span>
+                </div>
+              </div>
+
+              {/* Harvest / Curing Notes */}
+              <div className="space-y-1">
+                <label htmlFor={harvestNotesInputId} className="block text-xs font-semibold text-theme-text-muted">
+                  Harvest Notes / Terpene Profile / Curing Details
+                </label>
+                <textarea
+                  id={harvestNotesInputId}
+                  value={harvestNotes}
+                  onChange={(e) => setHarvestNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Aroma description, bud density, drying conditions (temp/RH), curing jar notes..."
+                  className="w-full bg-theme-surface border border-theme-border rounded-xl p-3 text-sm text-theme-text outline-hidden focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-theme-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => setShowHarvestModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-theme-text-muted hover:text-theme-text hover:bg-theme-surface transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-950/40 transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Archive className="w-4 h-4" />
+                  <span>Save & Archive Grow</span>
+                </button>
               </div>
             </form>
           </div>

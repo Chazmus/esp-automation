@@ -66,7 +66,7 @@ export function useGrowDiary() {
   // Active run selector
   const activeRun = useMemo<GrowRun | null>(() => {
     if (!store.activeRunId) {
-      return store.runs.find((r) => r.isActive) || store.runs[0] || null;
+      return null;
     }
     return store.runs.find((r) => r.id === store.activeRunId) || null;
   }, [store.runs, store.activeRunId]);
@@ -234,6 +234,73 @@ export function useGrowDiary() {
         ...r,
         isActive: r.id === runId,
       }));
+
+      const newStore: GrowDiaryStore = {
+        ...store,
+        runs: updatedRuns,
+        activeRunId: runId,
+      };
+
+      await saveStore(newStore);
+    },
+    [store, saveStore]
+  );
+
+  const selectRun = useCallback(
+    async (runId: string | null) => {
+      const newStore: GrowDiaryStore = {
+        ...store,
+        activeRunId: runId,
+      };
+      await saveStore(newStore);
+    },
+    [store, saveStore]
+  );
+
+  const archiveRun = useCallback(
+    async (
+      runId: string,
+      harvestInfo?: {
+        harvestDate?: string;
+        yieldGrams?: number | null;
+        rating?: number | null;
+        notes?: string;
+      }
+    ) => {
+      const today = new Date().toISOString().split('T')[0];
+      const updatedRuns = store.runs.map((r) => {
+        if (r.id === runId) {
+          return {
+            ...r,
+            isActive: false,
+            isArchived: true,
+            harvestDate: harvestInfo?.harvestDate ?? r.harvestDate ?? today,
+            yieldGrams: harvestInfo?.yieldGrams ?? r.yieldGrams ?? null,
+            rating: harvestInfo?.rating ?? r.rating ?? null,
+            notes: harvestInfo?.notes ?? r.notes,
+          };
+        }
+        return r;
+      });
+
+      const newStore: GrowDiaryStore = {
+        ...store,
+        runs: updatedRuns,
+      };
+
+      await saveStore(newStore);
+    },
+    [store, saveStore]
+  );
+
+  const unarchiveRun = useCallback(
+    async (runId: string) => {
+      const updatedRuns = store.runs.map((r) => {
+        if (r.id === runId) {
+          return { ...r, isArchived: false, isActive: true };
+        }
+        return r;
+      });
 
       const newStore: GrowDiaryStore = {
         ...store,
@@ -468,6 +535,9 @@ export function useGrowDiary() {
     createRun,
     updateRun,
     setActiveRun,
+    selectRun,
+    archiveRun,
+    unarchiveRun,
     deleteRun,
     addEntry,
     updateEntry,

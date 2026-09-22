@@ -129,11 +129,45 @@ describe('GrowDiaryPanel Component', () => {
     await user.type(searchInput, 'Pistils');
 
     // Reset tag filter to all to test search
-    const allFilterBtn = screen.getByRole('button', { name: /All/i });
+    const allFilterBtn = screen.getByRole('button', { name: /^All \(/i });
     await user.click(allFilterBtn);
 
     expect(screen.getByText(/First Pistils & Rapid Stretch/i)).toBeInTheDocument();
     expect(screen.queryByText(/Topped at Node 5/i)).not.toBeInTheDocument();
+  });
+
+  it('allows unselecting active run to view the Archive Hub and switching back', async () => {
+    const user = userEvent.setup();
+    render(<GrowDiaryPanel environmentMetrics={mockMetrics} controls={mockControls} />);
+
+    // Load sample data
+    const sampleBtn = screen.getByRole('button', { name: /Load Sample Diary/i });
+    await user.click(sampleBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Mimosa x Orange Punch')).toBeInTheDocument();
+    });
+
+    // Click "All Grows" button to deselect active run and view Archive Hub
+    const allGrowsBtn = screen.getByRole('button', { name: /All Grows/i });
+    await user.click(allGrowsBtn);
+
+    // Hub header should appear
+    await waitFor(() => {
+      expect(screen.getByText(/Grow Cycles & Archive/i)).toBeInTheDocument();
+    });
+
+    // The sample grow card should be visible in the archive grid
+    expect(screen.getByRole('heading', { name: /Mimosa x Orange Punch/i })).toBeInTheDocument();
+
+    // Click "Open Diary" on the card
+    const openDiaryBtn = screen.getByRole('button', { name: /Open Diary/i });
+    await user.click(openDiaryBtn);
+
+    // Should re-open the diary timeline
+    await waitFor(() => {
+      expect(screen.getByText('First Pistils & Rapid Stretch')).toBeInTheDocument();
+    });
   });
 
   it('opens new entry modal, fills form and adds a diary entry', async () => {
