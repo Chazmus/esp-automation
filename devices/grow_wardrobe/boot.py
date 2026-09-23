@@ -22,14 +22,15 @@ wifi_connected = wifi.connect()
 if wifi_connected:
     webrepl_configured = False
     try:
-        import webrepl_cfg
+        import webrepl_cfg  # type: ignore
+
         if webrepl_cfg.PASS == secrets.WEBREPL_PASSWORD:
             webrepl_configured = True
         else:
             print("⚠️ WebREPL password mismatch. Updating password...")
     except Exception:
         print("⚠️ WebREPL config not found. Creating webrepl_cfg.py...")
-        
+
     if not webrepl_configured:
         try:
             with open("webrepl_cfg.py", "w") as f:
@@ -39,10 +40,11 @@ if wifi_connected:
             machine.reset()
         except Exception as e:
             print(f"❌ Failed to write WebREPL config: {e}")
-            
+
     # 3. Start WebREPL
     try:
         import webrepl
+
         webrepl.start()
         print("✅ WebREPL server started successfully.")
     except Exception as e:

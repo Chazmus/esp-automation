@@ -1,9 +1,15 @@
 {
   "venvPath": ".",
   "venv": ".venv",
-  "pythonPath": ".venv/bin/python",
+  "stubPath": "typings",
   "extraPaths": [
     "lib",
-    ".venv/lib/python3.14/site-packages"
-  ]
+    ".venv/lib/python3.11/site-packages"
+  ],
+  "ignore": [
+    "lib/umqtt",
+    "scripts/webrepl_cli.py",
+    "homeassistant"
+  ],
+  "reportMissingModuleSource": false
 }

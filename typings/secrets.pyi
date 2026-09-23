@@ -1,0 +1,10 @@
+WIFI_SSID: str
+WIFI_PASSWORD: str
+HA_URL: str
+HA_TOKEN: str
+DEVICE_NAME: str
+WEBREPL_PASSWORD: str
+WIFI_STATIC_IP: tuple[str, str, str, str] | None
+MQTT_BROKER: str
+MQTT_USER: str
+MQTT_PASSWORD: str

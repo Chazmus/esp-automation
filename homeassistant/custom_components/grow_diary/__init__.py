@@ -1,4 +1,5 @@
 """Grow Diary custom component for Home Assistant."""
+
 import os
 import json
 import logging
@@ -93,11 +94,13 @@ class GrowDiaryPhotoView(HomeAssistantView):
 
             await hass.async_add_executor_job(_save_multipart)
 
-            return self.json({
-                "success": True,
-                "url": f"/local/grow_wardrobe/photos/{full_filename}",
-                "filename": full_filename
-            })
+            return self.json(
+                {
+                    "success": True,
+                    "url": f"/local/grow_wardrobe/photos/{full_filename}",
+                    "filename": full_filename,
+                }
+            )
         else:
             try:
                 body = await request.json()
@@ -118,11 +121,13 @@ class GrowDiaryPhotoView(HomeAssistantView):
 
                 await hass.async_add_executor_job(_save_base64)
 
-                return self.json({
-                    "success": True,
-                    "url": f"/local/grow_wardrobe/photos/{full_filename}",
-                    "filename": full_filename
-                })
+                return self.json(
+                    {
+                        "success": True,
+                        "url": f"/local/grow_wardrobe/photos/{full_filename}",
+                        "filename": full_filename,
+                    }
+                )
             except Exception as e:
                 _LOGGER.error("Failed to save base64 photo: %s", e)
                 return self.json({"error": str(e)}, status_code=400)
@@ -132,5 +137,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
     os.makedirs(PHOTOS_DIR, exist_ok=True)
     hass.http.register_view(GrowDiaryView())
     hass.http.register_view(GrowDiaryPhotoView())
-    _LOGGER.info("Grow Diary endpoints registered at /api/grow_diary and /api/grow_diary/photo")
+    _LOGGER.info(
+        "Grow Diary endpoints registered at /api/grow_diary and /api/grow_diary/photo"
+    )
     return True

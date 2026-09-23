@@ -84,3 +84,24 @@ Run pytest with `PYTHONPATH=.`:
 PYTHONPATH=. pytest
 ```
 All unit tests are located under `tests/`.
+
+---
+
+## 🎨 Linting, Formatting & Type Checking
+
+- **Formatting (Black)**:
+  ```bash
+  # Check formatting:
+  black --check .
+
+  # Auto-format all files:
+  black .
+  ```
+
+- **Type Checking (Pyright)**:
+  ```bash
+  pyright
+  ```
+  - Configuration is defined in [pyrightconfig.json](file:///home/chaz_bailey/workspace/esp-automation/pyrightconfig.json).
+  - MicroPython stubs and local module overrides (e.g. `time` extensions, `secrets`) live in [`typings/`](file:///home/chaz_bailey/workspace/esp-automation/typings).
+  - Vendored / host-specific modules (`lib/umqtt/`, `scripts/webrepl_cli.py`, `homeassistant/`) are configured in Pyright's `ignore` list.

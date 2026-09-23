@@ -3,9 +3,10 @@ import sys
 from unittest.mock import MagicMock
 
 # Mock network and secrets modules before importing lib.wifi
-sys.modules['network'] = MagicMock()
-sys.modules['secrets'] = MagicMock()
+sys.modules["network"] = MagicMock()
+sys.modules["secrets"] = MagicMock()
 from lib.wifi import get_status_desc
+
 
 class TestWifiStatus:
     def test_get_status_desc_idle(self):

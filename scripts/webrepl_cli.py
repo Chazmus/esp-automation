@@ -3,6 +3,7 @@ from __future__ import print_function
 import sys
 import os
 import struct
+
 try:
     import usocket as socket
 except ImportError:
@@ -12,13 +13,13 @@ except ImportError:
 USE_BUILTIN_UWEBSOCKET = 0
 # Treat this remote directory as a root for file transfers
 SANDBOX = ""
-#SANDBOX = "/tmp/webrepl/"
+# SANDBOX = "/tmp/webrepl/"
 DEBUG = 0
 
 WEBREPL_REQ_S = "<2sBBQLH64s"
 WEBREPL_PUT_FILE = 1
 WEBREPL_GET_FILE = 2
-WEBREPL_GET_VER  = 3
+WEBREPL_GET_VER = 3
 WEBREPL_FRAME_TXT = 0x81
 WEBREPL_FRAME_BIN = 0x82
 
@@ -31,6 +32,7 @@ def debugmsg(msg):
 if USE_BUILTIN_UWEBSOCKET:
     from uwebsocket import websocket
 else:
+
     class websocket:
 
         def __init__(self, s):
@@ -70,7 +72,9 @@ else:
                         break
                     if text_ok and fl == 0x81:
                         break
-                    debugmsg("Got unexpected websocket record of type %x, skipping it" % fl)
+                    debugmsg(
+                        "Got unexpected websocket record of type %x, skipping it" % fl
+                    )
                     while sz:
                         skip = self.s.recv(sz)
                         debugmsg("Skip data: %s" % skip)
@@ -95,6 +99,7 @@ def login(ws, passwd):
             assert ws.read(1, text_ok=True) == b" "
             break
     ws.write(passwd.encode("utf-8") + b"\r")
+
 
 def read_resp(ws):
     data = ws.read(4)
@@ -130,7 +135,11 @@ def do_repl(ws):
             # attr is: [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
             attr = termios.tcgetattr(self.infd)
             attr[0] &= ~(
-                termios.BRKINT | termios.ICRNL | termios.INPCK | termios.ISTRIP | termios.IXON
+                termios.BRKINT
+                | termios.ICRNL
+                | termios.INPCK
+                | termios.ISTRIP
+                | termios.IXON
             )
             attr[1] = 0
             attr[2] = attr[2] & ~(termios.CSIZE | termios.PARENB) | termios.CS8
@@ -184,7 +193,9 @@ def do_repl(ws):
 def put_file(ws, local_file, remote_file):
     sz = os.stat(local_file)[6]
     dest_fname = (SANDBOX + remote_file).encode("utf-8")
-    rec = struct.pack(WEBREPL_REQ_S, b"WA", WEBREPL_PUT_FILE, 0, 0, sz, len(dest_fname), dest_fname)
+    rec = struct.pack(
+        WEBREPL_REQ_S, b"WA", WEBREPL_PUT_FILE, 0, 0, sz, len(dest_fname), dest_fname
+    )
     debugmsg("%r %d" % (rec, len(rec)))
     ws.write(rec[:10])
     ws.write(rec[10:])
@@ -202,9 +213,12 @@ def put_file(ws, local_file, remote_file):
     print()
     assert read_resp(ws) == 0
 
+
 def get_file(ws, local_file, remote_file):
     src_fname = (SANDBOX + remote_file).encode("utf-8")
-    rec = struct.pack(WEBREPL_REQ_S, b"WA", WEBREPL_GET_FILE, 0, 0, 0, len(src_fname), src_fname)
+    rec = struct.pack(
+        WEBREPL_REQ_S, b"WA", WEBREPL_GET_FILE, 0, 0, 0, len(src_fname), src_fname
+    )
     debugmsg("%r %d" % (rec, len(rec)))
     ws.write(rec)
     assert read_resp(ws) == 0
@@ -236,8 +250,12 @@ def help(rc=0):
     )
     print("Arguments:")
     print("  [-p password] <host>                            - Access the remote REPL")
-    print("  [-p password] <host>:<remote_file> <local_file> - Copy remote file to local file")
-    print("  [-p password] <local_file> <host>:<remote_file> - Copy local file to remote file")
+    print(
+        "  [-p password] <host>:<remote_file> <local_file> - Copy remote file to local file"
+    )
+    print(
+        "  [-p password] <local_file> <host>:<remote_file> - Copy local file to remote file"
+    )
     print("Examples:")
     print("  %s 192.168.4.1" % exename)
     print("  %s script.py 192.168.4.1:/another_name.py" % exename)
@@ -245,9 +263,11 @@ def help(rc=0):
     print("  %s -p password 192.168.4.1:/app/script.py ." % exename)
     sys.exit(rc)
 
+
 def error(msg):
     print(msg)
     sys.exit(1)
+
 
 def parse_remote(remote):
     host, fname = remote.rsplit(":", 1)
@@ -265,27 +285,31 @@ def parse_remote(remote):
 # servers.
 def client_handshake(sock):
     cl = sock.makefile("rwb", 0)
-    cl.write(b"""\
+    cl.write(
+        b"""\
 GET / HTTP/1.1\r
 Host: echo.websocket.org\r
 Connection: Upgrade\r
 Upgrade: websocket\r
 Sec-WebSocket-Key: foo\r
 \r
-""")
+"""
+    )
     l = cl.readline()
-#    print(l)
+    #    print(l)
     while 1:
         l = cl.readline()
         if l == b"\r\n":
             break
+
+
 #        sys.stdout.write(l)
 
 
 def main():
     passwd = None
     for i in range(len(sys.argv)):
-        if sys.argv[i] == '-p':
+        if sys.argv[i] == "-p":
             sys.argv.pop(i)
             passwd = sys.argv.pop(i)
             break
@@ -295,6 +319,7 @@ def main():
 
     if passwd is None:
         import getpass
+
         passwd = getpass.getpass()
 
     if len(sys.argv) > 2:
@@ -333,7 +358,7 @@ def main():
     addr = ai[0][4]
 
     s.connect(addr)
-    #s = s.makefile("rwb")
+    # s = s.makefile("rwb")
     client_handshake(s)
 
     ws = websocket(s)

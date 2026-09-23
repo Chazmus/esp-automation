@@ -2,6 +2,7 @@ import machine
 import time
 import ahtx0
 
+
 class TempHumiditySensor:
     def __init__(self, sda_pin, scl_pin, sensor_type="AHT20"):
         self.sda_pin = sda_pin
@@ -18,10 +19,14 @@ class TempHumiditySensor:
         if self.sensor is None:
             try:
                 # Use SoftI2C to support multiple independent software buses on arbitrary pins
-                self.i2c = machine.SoftI2C(sda=machine.Pin(self.sda_pin), scl=machine.Pin(self.scl_pin), freq=100000)
+                self.i2c = machine.SoftI2C(
+                    sda=machine.Pin(self.sda_pin),
+                    scl=machine.Pin(self.scl_pin),
+                    freq=100000,
+                )
                 # Wait for sensor to stabilize
                 time.sleep_ms(50)
-                
+
                 if self.sensor_type == "AHT10":
                     self.sensor = ahtx0.AHT10(self.i2c)
                 else:

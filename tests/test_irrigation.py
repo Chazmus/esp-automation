@@ -13,11 +13,13 @@ if not hasattr(time, "ticks_diff"):
 from lib.controllers.irrigation import IrrigationController, IrrigationState
 from lib.config_store import ConfigStore, DEFAULT_CONFIG
 
+
 def create_mock_relays():
     irrig = MagicMock()
     agitate = MagicMock()
     waste = MagicMock()
     return irrig, agitate, waste
+
 
 def test_irrigation_init_coco():
     irrig, agitate, waste = create_mock_relays()
@@ -40,6 +42,7 @@ def test_irrigation_init_coco():
     irrig.off.assert_called_once()
     agitate.off.assert_called_once()
     waste.off.assert_called_once()
+
 
 def test_irrigation_coco_cycle_progression():
     irrig, agitate, waste = create_mock_relays()
@@ -102,6 +105,7 @@ def test_irrigation_coco_cycle_progression():
             assert controller.state == IrrigationState.IDLE
             waste.off.assert_called_once()
 
+
 def test_irrigation_soil_mode_trigger_and_target():
     irrig, agitate, waste = create_mock_relays()
     cfg = {
@@ -127,7 +131,7 @@ def test_irrigation_soil_mode_trigger_and_target():
     with patch("time.ticks_ms", return_value=3600001):
         with patch("time.ticks_diff", side_effect=lambda a, b: a - b):
             log = controller.evaluate(soil_moisture=25.0)
-            assert "Started Soil Irrigation" in log
+            assert log is not None and "Started Soil Irrigation" in log
             assert controller.state == IrrigationState.IRRIGATING
             irrig.on.assert_called_once()
 
@@ -143,10 +147,11 @@ def test_irrigation_soil_mode_trigger_and_target():
     with patch("time.ticks_ms", return_value=20000):
         with patch("time.ticks_diff", side_effect=lambda a, b: a - b):
             log = controller.evaluate(soil_moisture=52.0)
-            assert "Finished Soil Irrigation" in log
-            assert "Target reached" in log
+            assert log is not None and "Finished Soil Irrigation" in log
+            assert log is not None and "Target reached" in log
             assert controller.state == IrrigationState.IDLE
             irrig.off.assert_called()
+
 
 def test_irrigation_soil_mode_safety_timeout():
     irrig, agitate, waste = create_mock_relays()
@@ -165,24 +170,28 @@ def test_irrigation_soil_mode_safety_timeout():
     with patch("time.ticks_ms", return_value=16000):
         with patch("time.ticks_diff", side_effect=lambda a, b: a - b):
             log = controller.evaluate(soil_moisture=35.0)
-            assert "Finished Soil Irrigation" in log
-            assert "Safety timeout" in log
+            assert log is not None and "Finished Soil Irrigation" in log
+            assert log is not None and "Safety timeout" in log
             assert controller.state == IrrigationState.IDLE
             irrig.off.assert_called()
+
 
 def test_irrigation_dynamic_update_config():
     irrig, agitate, waste = create_mock_relays()
     controller = IrrigationController(irrig, agitate, waste, {"medium": "COCO"})
     assert controller.medium == "COCO"
 
-    controller.update_config({
-        "medium": "SOIL",
-        "soil_trigger_pct": 25.0,
-        "soil_target_pct": 40.0,
-    })
+    controller.update_config(
+        {
+            "medium": "SOIL",
+            "soil_trigger_pct": 25.0,
+            "soil_target_pct": 40.0,
+        }
+    )
     assert controller.medium == "SOIL"
     assert controller.soil_trigger_pct == 25.0
     assert controller.soil_target_pct == 40.0
+
 
 def test_config_store(tmp_path):
     test_file = str(tmp_path / "test_config.json")
@@ -198,6 +207,7 @@ def test_config_store(tmp_path):
     new_store = ConfigStore(filename=test_file)
     assert new_store.get("medium") == "SOIL"
     assert new_store.get("soil_trigger_pct") == 32.0
+
 
 def test_schedule_next_cycle():
     irrig, agitate, waste = create_mock_relays()

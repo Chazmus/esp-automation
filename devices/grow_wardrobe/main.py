@@ -37,36 +37,53 @@ vpd_controller.set_mode(vent_mode)
 
 irrig_settings = dict(config.IRRIGATION_CONFIG)
 irrig_settings.update(config_store.config)
-irrig_controller = IrrigationController(drip_relay, agitate_relay, waste_relay, irrig_settings)
+irrig_controller = IrrigationController(
+    drip_relay, agitate_relay, waste_relay, irrig_settings
+)
 
 # Sensors
 temp_sensors = {}
 if hasattr(config, "TEMP_HUMIDITY_SENSORS"):
     for zone, cfg in config.TEMP_HUMIDITY_SENSORS.items():
-        temp_sensors[zone] = TempHumiditySensor(sda_pin=cfg["sda"], scl_pin=cfg["scl"], sensor_type=cfg.get("type", "AHT20"))
-        
+        temp_sensors[zone] = TempHumiditySensor(
+            sda_pin=cfg["sda"], scl_pin=cfg["scl"], sensor_type=cfg.get("type", "AHT20")
+        )
+
 soil_sensor = None
 if hasattr(config, "SOIL_MOISTURE_SENSOR"):
     from lib.drivers.soil_moisture import SoilMoistureSensor
+
     cfg = config.SOIL_MOISTURE_SENSOR
-    soil_sensor = SoilMoistureSensor(adc_pin=cfg["adc_pin"], power_pin=cfg.get("power_pin"), dry_value=cfg.get("dry", 3800), wet_value=cfg.get("wet", 1275), num_samples=cfg.get("num_samples", 5))
+    soil_sensor = SoilMoistureSensor(
+        adc_pin=cfg["adc_pin"],
+        power_pin=cfg.get("power_pin"),
+        dry_value=cfg.get("dry", 3800),
+        wet_value=cfg.get("wet", 1275),
+        num_samples=cfg.get("num_samples", 5),
+    )
 
 # --- 3. MQTT Configuration ---
-MQTT_BROKER = getattr(secrets, 'MQTT_BROKER', secrets.HA_URL.replace("http://", "").split(":")[0])
-MQTT_USER = getattr(secrets, 'MQTT_USER', 'mqtt_user')
-MQTT_PASSWORD = getattr(secrets, 'MQTT_PASSWORD', '')
+MQTT_BROKER = getattr(
+    secrets, "MQTT_BROKER", secrets.HA_URL.replace("http://", "").split(":")[0]
+)
+MQTT_USER = getattr(secrets, "MQTT_USER", "mqtt_user")
+MQTT_PASSWORD = getattr(secrets, "MQTT_PASSWORD", "")
 CLIENT_ID = f"esp32_{config.DEVICE_NAME}"
 BASE_TOPIC = config.MQTT_BASE_TOPIC
 
+
 def pub(client, topic, payload, retain=False):
-    client.publish(f"{BASE_TOPIC}/{topic}".encode(), str(payload).encode(), retain=retain)
+    client.publish(
+        f"{BASE_TOPIC}/{topic}".encode(), str(payload).encode(), retain=retain
+    )
+
 
 def mqtt_callback(topic, msg):
     global vent_mode, irrig_mode
     topic = topic.decode()
     msg = msg.decode()
     print(f"MQTT Rx: {topic} -> {msg}")
-    
+
     # -- Ventilation Controls --
     if topic.endswith("ventilation/mode/set"):
         raw_mode = msg.upper()
@@ -78,17 +95,32 @@ def mqtt_callback(topic, msg):
         vpd_controller.set_mode(vent_mode)
         pub(client, "ventilation/mode/state", vent_mode, retain=True)
         if vent_mode == "MANUAL":
-            pub(client, "ventilation/reason/state", f"Manual Override: Fan set to {int(fan.speed)}%", retain=True)
+            pub(
+                client,
+                "ventilation/reason/state",
+                f"Manual Override: Fan set to {int(fan.speed)}%",
+                retain=True,
+            )
         else:
-            pub(client, "ventilation/reason/state", "Auto Mode: Evaluating VPD closed-loop", retain=True)
+            pub(
+                client,
+                "ventilation/reason/state",
+                "Auto Mode: Evaluating VPD closed-loop",
+                retain=True,
+            )
         print(f"Switched Ventilation mode to {vent_mode}")
-            
+
     elif topic.endswith("ventilation/fan/set"):
         if vent_mode == "MANUAL":
             fan.set_speed(int(msg))
             pub(client, "ventilation/fan/state", int(fan.speed))
-            pub(client, "ventilation/reason/state", f"Manual Override: Fan set to {int(fan.speed)}%", retain=True)
-            
+            pub(
+                client,
+                "ventilation/reason/state",
+                f"Manual Override: Fan set to {int(fan.speed)}%",
+                retain=True,
+            )
+
     # -- Irrigation Controls --
     elif topic.endswith("irrigation/mode/set"):
         raw_mode = msg.upper()
@@ -105,17 +137,29 @@ def mqtt_callback(topic, msg):
             pub(client, "irrigation/phase/state", "IDLE", retain=True)
 
         pub(client, "irrigation/mode/state", irrig_mode, retain=True)
-        pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
-        pub(client, "irrigation/next_cycle/state", str(irrig_controller.get_next_cycle_in_seconds()), retain=True)
-            
+        pub(
+            client,
+            "irrigation/phase/state",
+            irrig_controller.get_state_name(),
+            retain=True,
+        )
+        pub(
+            client,
+            "irrigation/next_cycle/state",
+            str(irrig_controller.get_next_cycle_in_seconds()),
+            retain=True,
+        )
+
     elif topic.endswith("irrigation/drip/set") and irrig_mode == "MANUAL":
         drip_relay.on() if msg == "ON" else drip_relay.off()
         pub(client, "irrigation/drip/state", "ON" if drip_relay.is_on() else "OFF")
-        
+
     elif topic.endswith("irrigation/agitate/set") and irrig_mode == "MANUAL":
         agitate_relay.on() if msg == "ON" else agitate_relay.off()
-        pub(client, "irrigation/agitate/state", "ON" if agitate_relay.is_on() else "OFF")
-        
+        pub(
+            client, "irrigation/agitate/state", "ON" if agitate_relay.is_on() else "OFF"
+        )
+
     elif topic.endswith("irrigation/waste/set") and irrig_mode == "MANUAL":
         waste_relay.on() if msg == "ON" else waste_relay.off()
         pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
@@ -178,7 +222,6 @@ def mqtt_callback(topic, msg):
                     print(f"⚠️ Error applying config {param}={msg}: {e}")
 
 
-
 # --- 4. Network Setup ---
 print("Connecting to WiFi...")
 if wifi.connect():
@@ -191,7 +234,9 @@ if wifi.connect():
 
     def connect_mqtt():
         print(f"Connecting to MQTT Broker at {MQTT_BROKER}...")
-        c = MQTTClient(CLIENT_ID, MQTT_BROKER, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60)
+        c = MQTTClient(
+            CLIENT_ID, MQTT_BROKER, user=MQTT_USER, password=MQTT_PASSWORD, keepalive=60
+        )
         c.set_callback(mqtt_callback)
         c.set_last_will(f"{BASE_TOPIC}/status".encode(), b"offline", retain=True)
         c.connect()
@@ -200,12 +245,17 @@ if wifi.connect():
         c.subscribe(f"{BASE_TOPIC}/+/+/set".encode())
         c.subscribe(f"{BASE_TOPIC}/+/set".encode())
         print("✅ MQTT Connected & Subscribed to all /set topics.")
-        
+
         # Publish initial states
         pub(c, "ventilation/mode/state", vent_mode, retain=True)
         pub(c, "irrigation/mode/state", irrig_mode, retain=True)
         pub(c, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
-        pub(c, "irrigation/next_cycle/state", str(irrig_controller.get_next_cycle_in_seconds()), retain=True)
+        pub(
+            c,
+            "irrigation/next_cycle/state",
+            str(irrig_controller.get_next_cycle_in_seconds()),
+            retain=True,
+        )
         for k, v in config_store.config.items():
             pub(c, f"config/{k}/state", str(v), retain=True)
         return c
@@ -246,9 +296,9 @@ if wifi.connect():
                     print(f"⚠️ MQTT ping failed: {e}")
                     client = None
                     continue
-            
+
             current_time = time.ticks_ms()
-            
+
             # 2. Sensor reading & VPD (Every 5 seconds)
             if time.ticks_diff(current_time, last_sensor_read) > 5000:
                 last_sensor_read = current_time
@@ -256,17 +306,19 @@ if wifi.connect():
                 for zone, sensor in temp_sensors.items():
                     t, h = sensor.read()
                     readings[zone] = (t, h)
-                    
+
                 canopy_t, canopy_h = readings.get("canopy", (None, None))
                 ambient_t, ambient_h = readings.get("ambient", (None, None))
-                
+
                 if vent_mode == "AUTO":
-                    log = vpd_controller.evaluate(canopy_t, canopy_h, ambient_t, ambient_h, dt_seconds=5.0)
+                    log = vpd_controller.evaluate(
+                        canopy_t, canopy_h, ambient_t, ambient_h, dt_seconds=5.0
+                    )
                     if log:
                         print(log)
                         pub(client, "ventilation/reason/state", log, retain=True)
                     pub(client, "ventilation/fan/state", int(fan.speed))
-                    
+
                 # Post telemetry every 10 seconds via MQTT
                 if time.ticks_diff(current_time, last_ha_post) > 10000:
                     last_ha_post = current_time
@@ -277,11 +329,15 @@ if wifi.connect():
                         if h is not None:
                             telemetry[f"{zone}_humidity"] = round(h, 2)
                         if t is not None and h is not None:
-                            offset = vpd_controller.leaf_offset if zone in ("canopy", "pot") else 0.0
+                            offset = (
+                                vpd_controller.leaf_offset
+                                if zone in ("canopy", "pot")
+                                else 0.0
+                            )
                             vpd_val = calculate_vpd(t, h, leaf_offset=offset)
                             if vpd_val is not None:
                                 telemetry[f"{zone}_vpd"] = round(vpd_val, 2)
-                                
+
                     if soil_sensor is not None:
                         raw, pct = soil_sensor.read()
                         if pct is not None:
@@ -291,37 +347,72 @@ if wifi.connect():
                     if fan is not None:
                         telemetry["fan_speed"] = int(fan.speed)
 
-                    if hasattr(vpd_controller, 'last_vpd') and vpd_controller.last_vpd is not None:
+                    if (
+                        hasattr(vpd_controller, "last_vpd")
+                        and vpd_controller.last_vpd is not None
+                    ):
                         telemetry["vpd"] = round(vpd_controller.last_vpd, 2)
 
-                    if hasattr(vpd_controller, 'last_reason') and vpd_controller.last_reason:
+                    if (
+                        hasattr(vpd_controller, "last_reason")
+                        and vpd_controller.last_reason
+                    ):
                         telemetry["fan_reason"] = vpd_controller.last_reason
 
                     if irrig_controller is not None:
                         next_sec = irrig_controller.get_next_cycle_in_seconds()
                         telemetry["next_feed_seconds"] = next_sec
                         telemetry["irrigation_state"] = irrig_controller.state
-                        telemetry["irrigation_phase"] = irrig_controller.get_state_name()
-                        pub(client, "irrigation/next_cycle/state", str(next_sec), retain=True)
-                        pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
+                        telemetry["irrigation_phase"] = (
+                            irrig_controller.get_state_name()
+                        )
+                        pub(
+                            client,
+                            "irrigation/next_cycle/state",
+                            str(next_sec),
+                            retain=True,
+                        )
+                        pub(
+                            client,
+                            "irrigation/phase/state",
+                            irrig_controller.get_state_name(),
+                            retain=True,
+                        )
 
                     if telemetry:
                         payload_json = json.dumps(telemetry)
                         print(f"📡 MQTT Telemetry: {payload_json}")
                         pub(client, "telemetry", payload_json)
-            
+
             # 3. Irrigation State Machine
             if irrig_mode == "AUTO":
                 log = irrig_controller.evaluate(soil_moisture=latest_soil_pct)
                 if log:
                     print(log)
-                    pub(client, "irrigation/drip/state", "ON" if drip_relay.is_on() else "OFF")
-                    pub(client, "irrigation/agitate/state", "ON" if agitate_relay.is_on() else "OFF")
-                    pub(client, "irrigation/waste/state", "ON" if waste_relay.is_on() else "OFF")
-                    pub(client, "irrigation/phase/state", irrig_controller.get_state_name(), retain=True)
-                    
-            time.sleep(0.05) # Snappy 50ms loop
-            
+                    pub(
+                        client,
+                        "irrigation/drip/state",
+                        "ON" if drip_relay.is_on() else "OFF",
+                    )
+                    pub(
+                        client,
+                        "irrigation/agitate/state",
+                        "ON" if agitate_relay.is_on() else "OFF",
+                    )
+                    pub(
+                        client,
+                        "irrigation/waste/state",
+                        "ON" if waste_relay.is_on() else "OFF",
+                    )
+                    pub(
+                        client,
+                        "irrigation/phase/state",
+                        irrig_controller.get_state_name(),
+                        retain=True,
+                    )
+
+            time.sleep(0.05)  # Snappy 50ms loop
+
     except KeyboardInterrupt:
         print("\nExiting. Ensuring safe state...")
         irrig_controller.force_idle()

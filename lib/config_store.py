@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "light_start_time": "06:00",
 }
 
+
 class ConfigStore:
     def __init__(self, filename="grow_config.json"):
         self.filename = filename

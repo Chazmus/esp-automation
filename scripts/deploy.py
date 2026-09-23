@@ -5,20 +5,26 @@ import glob
 import subprocess
 import time
 
+
 def find_serial_port():
-    ports = glob.glob('/dev/ttyACM*') + glob.glob('/dev/ttyUSB*')
+    ports = glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
     if not ports:
         return None
     return sorted(ports)[0]
 
+
 def webrepl_reset(project_root, ip, password):
     print("🔄 Sending hardware reset command via WebREPL...")
-    return webrepl_run_exec(project_root, ip, password, "import machine; machine.reset()")
+    return webrepl_run_exec(
+        project_root, ip, password, "import machine; machine.reset()"
+    )
+
 
 def webrepl_run_exec(project_root, ip, password, py_cmd):
     sys.path.insert(0, os.path.join(project_root, "scripts"))
     import webrepl_cli
     import socket
+
     s = None
     try:
         s = socket.socket()
@@ -31,7 +37,7 @@ def webrepl_run_exec(project_root, ip, password, py_cmd):
         ws.write(b"\x03", frame=0x81)
         time.sleep(0.5)
         # Send command
-        ws.write(py_cmd.encode('utf-8') + b"\r", frame=0x81)
+        ws.write(py_cmd.encode("utf-8") + b"\r", frame=0x81)
         time.sleep(0.5)
         print("🔄 WebREPL remote exec command sent successfully.")
         return True
@@ -47,34 +53,34 @@ def webrepl_run_exec(project_root, ip, password, py_cmd):
             time.sleep(0.5)
 
 
-
-
-
-
 def get_available_devices(project_root):
     devices_dir = os.path.join(project_root, "devices")
     if not os.path.isdir(devices_dir):
         return []
-    return sorted([
-        name for name in os.listdir(devices_dir)
-        if os.path.isdir(os.path.join(devices_dir, name))
-    ])
+    return sorted(
+        [
+            name
+            for name in os.listdir(devices_dir)
+            if os.path.isdir(os.path.join(devices_dir, name))
+        ]
+    )
+
 
 def main():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     # Add local lib folder to python path to resolve local secrets
     sys.path.insert(0, os.path.join(project_root, "lib"))
-    
+
     # 1. Parse arguments (check for --ip <ip_address> or --remote)
     ip_addr = None
     args = sys.argv[1:]
-    
+
     # Check for --remote flag
     use_remote = False
     if "--remote" in args:
         use_remote = True
         args.remove("--remote")
-    
+
     # Check for --ip flag
     if "--ip" in args:
         try:
@@ -85,38 +91,50 @@ def main():
             args.pop(ip_idx)
             use_remote = True
         except IndexError:
-            print("❌ Error: --ip option requires an IP address argument.", file=sys.stderr)
+            print(
+                "❌ Error: --ip option requires an IP address argument.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
     available_devices = get_available_devices(project_root)
-    
+
     if len(args) < 1:
         print("❌ Error: Please specify a device directory to deploy.", file=sys.stderr)
-        print("Usage: python3 scripts/deploy.py <device_directory> [--remote] [--ip <ip_address>]", file=sys.stderr)
+        print(
+            "Usage: python3 scripts/deploy.py <device_directory> [--remote] [--ip <ip_address>]",
+            file=sys.stderr,
+        )
         print("\nAvailable devices:", file=sys.stderr)
         for dev in available_devices:
             print(f"  * {dev}", file=sys.stderr)
         sys.exit(1)
-        
+
     device = args[0]
-    
+
     if device not in available_devices:
-        print(f"❌ Error: Device directory 'devices/{device}' does not exist.", file=sys.stderr)
+        print(
+            f"❌ Error: Device directory 'devices/{device}' does not exist.",
+            file=sys.stderr,
+        )
         print("\nAvailable devices:", file=sys.stderr)
         for dev in available_devices:
             print(f"  * {dev}", file=sys.stderr)
         sys.exit(1)
-        
+
     print("=== ESP32-C3 Selective Deployer ===")
     print(f"📱 Target Device: {device}")
-    
+
     # Auto-resolve device IP from config.py if not specified
     if ip_addr is None:
         try:
             import importlib.util
+
             dev_cfg_path = os.path.join(project_root, "devices", device, "config.py")
             if os.path.isfile(dev_cfg_path):
-                spec = importlib.util.spec_from_file_location("dev_config", dev_cfg_path)
+                spec = importlib.util.spec_from_file_location(
+                    "dev_config", dev_cfg_path
+                )
                 if spec and spec.loader:
                     dev_cfg = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(dev_cfg)
@@ -129,21 +147,26 @@ def main():
     serial_port = find_serial_port() if not use_remote else None
     if use_remote or (serial_port is None and ip_addr is not None):
         if ip_addr is None:
-            print(f"❌ Error: Remote deployment requested for '{device}', but no IP was specified or configured.", file=sys.stderr)
+            print(
+                f"❌ Error: Remote deployment requested for '{device}', but no IP was specified or configured.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         is_remote = True
         if not use_remote:
-            print(f"💡 No USB serial port detected. Auto-detected configured IP: {ip_addr}")
+            print(
+                f"💡 No USB serial port detected. Auto-detected configured IP: {ip_addr}"
+            )
     else:
         is_remote = False
     cmd_prefix = []
-    
+
     # Choose correct mpremote/esptool executables
     venv_mpremote = os.path.join(project_root, ".venv", "bin", "mpremote")
     venv_esptool = os.path.join(project_root, ".venv", "bin", "esptool")
     mpremote = venv_mpremote if os.path.isfile(venv_mpremote) else "mpremote"
     esptool = venv_esptool if os.path.isfile(venv_esptool) else "esptool"
-    
+
     if is_remote:
         port = f"webrepl:{ip_addr}"
         print(f"📡 Remote WebREPL deployment selected: {port}")
@@ -151,24 +174,28 @@ def main():
         # Auto-detect serial port
         port = find_serial_port()
         if not port:
-            print("❌ Error: No connected ESP32 device found on /dev/ttyACM* or /dev/ttyUSB*", file=sys.stderr)
+            print(
+                "❌ Error: No connected ESP32 device found on /dev/ttyACM* or /dev/ttyUSB*",
+                file=sys.stderr,
+            )
             sys.exit(1)
-            
+
         print(f"🔍 Detected board on port: {port}")
-        
+
         # Dynamic permission checking
         has_write_permission = os.access(port, os.W_OK)
         if not has_write_permission:
             print("⚠️  Using sudo for permission to access serial port...")
             cmd_prefix = ["sudo"]
-            
+
         # Hard-reset the board to break any frozen print loops (common with native USB CDC on ESP32-C3)
         print("🔄 Resetting the board to prepare for deployment...")
         esptool_cmd = cmd_prefix + [esptool, "--port", port, "chip-id"]
-        subprocess.run(esptool_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            esptool_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         time.sleep(1)
 
-    
     # 5. Build list of files and directories to copy from /lib
     shared_lib_dir = os.path.join(project_root, "lib")
     lib_files = []
@@ -181,7 +208,7 @@ def main():
                 if f.endswith(".py"):
                     filepath = os.path.join(root, f)
                     lib_files.append(filepath)
-                    
+
                     # Compute required destination directories
                     relpath = os.path.relpath(filepath, shared_lib_dir)
                     parts = relpath.split(os.sep)[:-1]
@@ -190,7 +217,7 @@ def main():
                     for part in parts:
                         curr = f"{curr}/{part}"
                         dest_dirs.add(curr)
-                        
+
     sorted_dest_dirs = sorted(list(dest_dirs), key=len)
 
     # 6. Create directories on the microcontroller
@@ -198,18 +225,29 @@ def main():
         print("📁 Preparing directory structure on microcontroller...")
         if is_remote:
             import secrets
+
             # Build Python commands to run remotely via WebREPL to create dirs
-            dir_creation_code = "; ".join([
-                f"'{os.path.basename(d)}' in os.listdir() or os.mkdir('{d}')" if '/' not in d else f"'{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}') or os.mkdir('{d}')"
-                for d in sorted_dest_dirs
-            ])
+            dir_creation_code = "; ".join(
+                [
+                    (
+                        f"'{os.path.basename(d)}' in os.listdir() or os.mkdir('{d}')"
+                        if "/" not in d
+                        else f"'{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}') or os.mkdir('{d}')"
+                    )
+                    for d in sorted_dest_dirs
+                ]
+            )
             py_cmd = f"import os; {dir_creation_code}"
             webrepl_run_exec(project_root, ip_addr, secrets.WEBREPL_PASSWORD, py_cmd)
         else:
             for d in sorted_dest_dirs:
                 mpremote_cmd_mkdir = cmd_prefix + [
-                    mpremote, "connect", port, "resume", "exec", 
-                    f"import os; '{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}' or '.') or os.mkdir('{d}')"
+                    mpremote,
+                    "connect",
+                    port,
+                    "resume",
+                    "exec",
+                    f"import os; '{os.path.basename(d)}' in os.listdir('{os.path.dirname(d)}' or '.') or os.mkdir('{d}')",
                 ]
                 try:
                     subprocess.run(mpremote_cmd_mkdir, check=True)
@@ -221,71 +259,123 @@ def main():
     if lib_files:
         print(f"📤 Synchronizing shared libraries to /lib on {device}...")
         import secrets
+
         for filepath in sorted(lib_files):
-            relpath = os.path.relpath(filepath, shared_lib_dir).replace(os.sep, '/')
+            relpath = os.path.relpath(filepath, shared_lib_dir).replace(os.sep, "/")
             remote_dest = f"lib/{relpath}"
-            print(f"   👉 Deploying shared {os.path.relpath(filepath, project_root)} to :{remote_dest}...")
+            print(
+                f"   👉 Deploying shared {os.path.relpath(filepath, project_root)} to :{remote_dest}..."
+            )
             if is_remote:
                 try:
-                    webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
-                    subprocess.run([
-                        sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
-                        filepath, f"{ip_addr}:{remote_dest}"
-                    ], check=True)
+                    webrepl_cli = os.path.join(
+                        project_root, "scripts", "webrepl_cli.py"
+                    )
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            webrepl_cli,
+                            "-p",
+                            secrets.WEBREPL_PASSWORD,
+                            filepath,
+                            f"{ip_addr}:{remote_dest}",
+                        ],
+                        check=True,
+                    )
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {relpath}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
             else:
-                mpremote_cmd_cp = cmd_prefix + [mpremote, "connect", port, "resume", "cp", filepath, f":{remote_dest}"]
+                mpremote_cmd_cp = cmd_prefix + [
+                    mpremote,
+                    "connect",
+                    port,
+                    "resume",
+                    "cp",
+                    filepath,
+                    f":{remote_dest}",
+                ]
                 try:
                     subprocess.run(mpremote_cmd_cp, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {relpath}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
-                    
+
     # 7. Upload device-specific files from devices/$DEVICE/ folder to microcontroller root (/)
     device_dir = os.path.join(project_root, "devices", device)
     device_files = glob.glob(os.path.join(device_dir, "*.py"))
     if device_files:
         print("📤 Synchronizing device-specific files to root...")
         import secrets
+
         for filepath in sorted(device_files):
             filename = os.path.basename(filepath)
-            print(f"   👉 Deploying device file {os.path.relpath(filepath, project_root)} to :{filename}...")
+            print(
+                f"   👉 Deploying device file {os.path.relpath(filepath, project_root)} to :{filename}..."
+            )
             if is_remote:
                 try:
-                    webrepl_cli = os.path.join(project_root, "scripts", "webrepl_cli.py")
-                    subprocess.run([
-                        sys.executable, webrepl_cli, "-p", secrets.WEBREPL_PASSWORD,
-                        filepath, f"{ip_addr}:{filename}"
-                    ], check=True)
+                    webrepl_cli = os.path.join(
+                        project_root, "scripts", "webrepl_cli.py"
+                    )
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            webrepl_cli,
+                            "-p",
+                            secrets.WEBREPL_PASSWORD,
+                            filepath,
+                            f"{ip_addr}:{filename}",
+                        ],
+                        check=True,
+                    )
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
             else:
-                mpremote_cmd_cp_dev = cmd_prefix + [mpremote, "connect", port, "resume", "cp", filepath, f":{filename}"]
+                mpremote_cmd_cp_dev = cmd_prefix + [
+                    mpremote,
+                    "connect",
+                    port,
+                    "resume",
+                    "cp",
+                    filepath,
+                    f":{filename}",
+                ]
                 try:
                     subprocess.run(mpremote_cmd_cp_dev, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"❌ Error copying {filename}: {e}", file=sys.stderr)
                     sys.exit(e.returncode)
-                
+
     # 8. Reset the board to launch the new code
     print("🔄 Resetting the board to execute new code...")
     if is_remote:
         import secrets
+
         webrepl_reset(project_root, ip_addr, secrets.WEBREPL_PASSWORD)
     else:
         try:
-            mpremote_cmd_reset = cmd_prefix + [mpremote, "connect", port, "resume", "soft-reset"]
+            mpremote_cmd_reset = cmd_prefix + [
+                mpremote,
+                "connect",
+                port,
+                "resume",
+                "soft-reset",
+            ]
             subprocess.run(mpremote_cmd_reset, check=True)
         except Exception:
             try:
-                subprocess.run(cmd_prefix + [esptool, "--port", port, "chip-id"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(
+                    cmd_prefix + [esptool, "--port", port, "chip-id"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
             except Exception:
                 pass
-        
+
     print(f"✅ Deployment complete! Your {device} code is now running.")
+
 
 if __name__ == "__main__":
     main()

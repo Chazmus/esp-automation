@@ -2,18 +2,20 @@ import pytest
 from unittest.mock import MagicMock
 from lib.controllers.vpd import calculate_svp, VPDController
 
+
 def test_calculate_svp():
     # Test None temp
     assert calculate_svp(None) == 0.0
-    
+
     # Test typical temperature values (SVP in kPa)
     # At 20C, SVP is approx 2.338 kPa
     svp_20 = calculate_svp(20.0)
     assert 2.3 < svp_20 < 2.4
-    
+
     # At 0C, SVP is approx 0.611 kPa
     svp_0 = calculate_svp(0.0)
     assert 0.6 < svp_0 < 0.62
+
 
 def test_vpd_controller_init():
     fan = MagicMock()
@@ -28,9 +30,9 @@ def test_vpd_controller_init():
         "max_safe_humidity": 70.0,
         "leaf_temp_offset": 1.5,
         "deadband": 0.02,
-        "target_temp": 26.0
+        "target_temp": 26.0,
     }
-    
+
     controller = VPDController(fan, config)
     assert controller.target_vpd == 1.5
     assert controller.kp == 30.0
@@ -45,43 +47,48 @@ def test_vpd_controller_init():
     assert controller.target_temp == 26.0
     assert controller.integral_error == 0.0
 
+
 def test_evaluate_none_inputs():
     fan = MagicMock()
     controller = VPDController(fan, {})
-    
+
     assert controller.evaluate(None, 50.0) is None
     assert controller.evaluate(25.0, None) is None
     fan.set_speed.assert_not_called()
+
 
 def test_evaluate_temp_too_high_override():
     fan = MagicMock()
     config = {"max_safe_temp": 30.0}
     controller = VPDController(fan, config)
-    
+
     res = controller.evaluate(canopy_temp=31.0, canopy_humidity=50.0)
-    assert "OVERRIDE" in res
-    assert "Temp" in res
+    assert res is not None and "OVERRIDE" in res
+    assert res is not None and "Temp" in res
     fan.set_speed.assert_called_once_with(100)
+
 
 def test_evaluate_humidity_too_high_override():
     fan = MagicMock()
     config = {"max_safe_humidity": 65.0}
     controller = VPDController(fan, config)
-    
+
     res = controller.evaluate(canopy_temp=25.0, canopy_humidity=70.0)
-    assert "OVERRIDE" in res
-    assert "Hum" in res
+    assert res is not None and "OVERRIDE" in res
+    assert res is not None and "Hum" in res
     fan.set_speed.assert_called_once_with(100)
+
 
 def test_evaluate_temp_too_low_override():
     fan = MagicMock()
     config = {"min_safe_temp": 16.0, "min_speed": 30}
     controller = VPDController(fan, config)
-    
+
     res = controller.evaluate(canopy_temp=15.0, canopy_humidity=50.0)
-    assert "OVERRIDE" in res
-    assert "Temp" in res
+    assert res is not None and "OVERRIDE" in res
+    assert res is not None and "Temp" in res
     fan.set_speed.assert_called_once_with(30)
+
 
 def test_evaluate_ambient_clamp():
     fan = MagicMock()
@@ -93,21 +100,19 @@ def test_evaluate_ambient_clamp():
         "min_safe_temp": 16.0,
         "max_safe_humidity": 95.0,
         "leaf_temp_offset": 2.0,
-        "deadband": 0.05
+        "deadband": 0.05,
     }
     controller = VPDController(fan, config)
-    
+
     # Canopy: 24C, 80% humidity (low VPD)
     # Ambient: 24C, 90% humidity (wetter than canopy)
     res = controller.evaluate(
-        canopy_temp=24.0,
-        canopy_humidity=80.0,
-        ambient_temp=24.0,
-        ambient_humidity=90.0
+        canopy_temp=24.0, canopy_humidity=80.0, ambient_temp=24.0, ambient_humidity=90.0
     )
-    
-    assert "CLAMP" in res
+
+    assert res is not None and "CLAMP" in res
     fan.set_speed.assert_called_once_with(30)
+
 
 def test_evaluate_normal_vpd_proportional():
     fan = MagicMock()
@@ -121,10 +126,10 @@ def test_evaluate_normal_vpd_proportional():
         "min_safe_temp": 16.0,
         "max_safe_humidity": 95.0,
         "leaf_temp_offset": 2.0,
-        "deadband": 0.0
+        "deadband": 0.0,
     }
     controller = VPDController(fan, config)
-    
+
     # Calculate expected VPD at 25C, 60% humidity
     # Leaf temp = 23C. SVP leaf (23C) = 2.810 kPa
     # SVP air (25C) = 3.169 kPa. AVP air = 3.169 * 0.6 = 1.901 kPa
@@ -133,10 +138,11 @@ def test_evaluate_normal_vpd_proportional():
     # p_term = 40.0 * 0.291 = 11.64
     # Expected speed = 30 + 11.64 = 41.64 -> 41%
     controller.evaluate(canopy_temp=25.0, canopy_humidity=60.0)
-    
+
     # Check that set_speed was called with approximately 41
     called_speed = fan.set_speed.call_args[0][0]
     assert 40 <= called_speed <= 43
+
 
 def test_evaluate_integral_windup():
     fan = MagicMock()
@@ -150,31 +156,28 @@ def test_evaluate_integral_windup():
         "min_safe_temp": 16.0,
         "max_safe_humidity": 95.0,
         "leaf_temp_offset": 2.0,
-        "deadband": 0.0
+        "deadband": 0.0,
     }
     controller = VPDController(fan, config)
-    
+
     # Large positive error triggers integral term growth
     # Let's run multiple steps to wind up the integral term
     for _ in range(50):
         controller.evaluate(canopy_temp=25.0, canopy_humidity=60.0, dt_seconds=2.0)
-        
+
     # Max integral term clamp is max_speed - min_speed = 70.0
     assert controller.integral_error == 70.0
 
+
 def test_vpd_controller_modes():
     fan = MagicMock()
-    config = {
-        "target_vpd": 1.2,
-        "leaf_temp_offset": 2.0,
-        "min_speed": 30
-    }
+    config = {"target_vpd": 1.2, "leaf_temp_offset": 2.0, "min_speed": 30}
     controller = VPDController(fan, config)
     assert controller.mode == "AUTO"
     assert controller.target_vpd == 1.2
     assert controller.leaf_offset == 2.0
     assert controller.min_speed == 30
-    
+
     controller.set_mode("MANUAL")
     assert controller.mode == "MANUAL"
 
@@ -185,13 +188,13 @@ def test_vpd_controller_modes():
     controller.set_mode("AUTO")
     assert controller.mode == "AUTO"
 
+
 def test_vpd_controller_last_reason():
     fan = MagicMock()
     config = {"max_safe_temp": 30.0}
     controller = VPDController(fan, config)
     assert controller.last_reason == ""
-    
+
     res = controller.evaluate(canopy_temp=32.0, canopy_humidity=50.0)
     assert controller.last_reason == res
     assert "OVERRIDE" in controller.last_reason
-
